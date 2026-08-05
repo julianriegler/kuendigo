@@ -53,15 +53,28 @@ async function callClaude(
   apiKey: string,
   messages: object[]
 ): Promise<string> {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  // On web (Vercel): route through /api/analyze proxy to avoid CORS issues
+  // On native: call Anthropic API directly
+  const isWeb = typeof window !== 'undefined';
+
+  const url = isWeb
+    ? '/api/analyze'
+    : 'https://api.anthropic.com/v1/messages';
+
+  const headers: Record<string, string> = isWeb
+    ? {
+        'Content-Type': 'application/json',
+        'x-anthropic-key': apiKey,        // proxy reads this header
+      }
+    : {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      };
+
+  const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      // Required for browser-side API calls
-      'anthropic-dangerous-allow-browser': 'true',
-    },
+    headers,
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
       max_tokens: 2048,
@@ -72,7 +85,7 @@ async function callClaude(
   if (!response.ok) {
     const errBody = await response.json().catch(() => ({}));
     const msg = (errBody as any)?.error?.message ?? `HTTP ${response.status}`;
-    throw new Error(`Anthropic API: ${msg}`);
+    throw new Error(msg);
   }
   const data = await response.json();
   return data.content[0]?.text ?? '[]';
