@@ -528,7 +528,7 @@ export default function UploadScreen() {
                 <TouchableOpacity
                   style={[
                     styles.analyzeBtn,
-                    !hasInput && !loading && !ANTHROPIC_API_KEY && styles.analyzeBtnDemo,
+                    !hasInput && !loading && !apiKey && styles.analyzeBtnDemo,
                   ]}
                   onPress={analyze}
                   disabled={loading}
@@ -537,7 +537,7 @@ export default function UploadScreen() {
                   {loading
                     ? <ActivityIndicator color={colors.bg} />
                     : <Text style={styles.analyzeBtnText}>
-                        {hasInput || !ANTHROPIC_API_KEY ? 'Abos analysieren →' : 'Demo starten →'}
+                        {hasInput || !apiKey ? 'Abos analysieren →' : 'Demo starten →'}
                       </Text>
                   }
                 </TouchableOpacity>
