@@ -1,68 +1,121 @@
 import { useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, Alert, ActivityIndicator,
+  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  Alert, ActivityIndicator, TextInput,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import { colors } from '../constants/theme';
-import { DEMO_SUBSCRIPTIONS, analyzeSubscriptions } from '../utils/analyzeSubscriptions';
+import {
+  analyzeStatement, analyzeScreenshot, analyzeEmails,
+  DEMO_SUBSCRIPTIONS,
+} from '../utils/analyzeSubscriptions';
 
-const BANKS = [
-  { name: 'Sparkasse',     flag: '🇩🇪' },
-  { name: 'ING',           flag: '🇩🇪' },
-  { name: 'DKB',           flag: '🇩🇪' },
-  { name: 'N26',           flag: '🇩🇪' },
-  { name: 'Erste Bank',    flag: '🇦🇹' },
-  { name: 'Raiffeisen',    flag: '🇦🇹' },
-  { name: 'Bank Austria',  flag: '🇦🇹' },
-  { name: 'Revolut',       flag: '🌍' },
-];
-
-// Paste your Anthropic API key here for the MVP — never commit to git
+// ← Trage hier deinen Anthropic API Key ein
 const ANTHROPIC_API_KEY = '';
+
+type Method = 'statement' | 'screenshot' | 'email' | 'manual' | null;
+
+const METHODS = [
+  {
+    id: 'statement' as Method,
+    icon: '📄',
+    title: 'Kontoauszug',
+    sub: 'CSV oder PDF hochladen',
+  },
+  {
+    id: 'screenshot' as Method,
+    icon: '📸',
+    title: 'Screenshot',
+    sub: 'Foto der Banking-App',
+  },
+  {
+    id: 'email' as Method,
+    icon: '📧',
+    title: 'E-Mail',
+    sub: 'Rechnungs-E-Mails einfügen',
+  },
+  {
+    id: 'manual' as Method,
+    icon: '✏️',
+    title: 'Manuell',
+    sub: 'Abos selbst eintragen',
+  },
+];
 
 export default function UploadScreen() {
   const router = useRouter();
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [fileContent, setFileContent] = useState<string | null>(null);
+  const [method, setMethod] = useState<Method>(null);
   const [loading, setLoading] = useState(false);
 
-  async function pickFile() {
+  // Statement state
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [fileContent, setFileContent] = useState<string | null>(null);
+
+  // Screenshot state
+  const [screenshotB64, setScreenshotB64] = useState<string | null>(null);
+  const [screenshotMime, setScreenshotMime] = useState('image/jpeg');
+  const [screenshotName, setScreenshotName] = useState<string | null>(null);
+
+  // Email state
+  const [emailText, setEmailText] = useState('');
+
+  async function pickStatement() {
     const result = await DocumentPicker.getDocumentAsync({
       type: ['text/csv', 'text/plain', 'application/pdf'],
       copyToCacheDirectory: true,
     });
-
     if (result.canceled) return;
-
     const asset = result.assets[0];
     setFileName(asset.name);
-
     try {
       const content = await FileSystem.readAsStringAsync(asset.uri, {
         encoding: FileSystem.EncodingType.UTF8,
       });
       setFileContent(content);
     } catch {
-      // PDF binary — will handle separately
       setFileContent('[PDF]');
     }
   }
 
-  async function analyze() {
-    if (!fileContent) return;
-    setLoading(true);
+  async function pickScreenshot() {
+    // Dynamic import so the module only loads when needed
+    const ImagePicker = await import('expo-image-picker');
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Berechtigung benötigt', 'Bitte erlaube den Zugriff auf deine Fotos.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.85,
+      base64: true,
+    });
+    if (result.canceled) return;
+    const asset = result.assets[0];
+    setScreenshotB64(asset.base64 ?? null);
+    setScreenshotMime(asset.mimeType ?? 'image/jpeg');
+    setScreenshotName(asset.fileName ?? 'screenshot.jpg');
+  }
 
+  async function analyze() {
+    setLoading(true);
     try {
       let subs;
-      if (!ANTHROPIC_API_KEY) {
-        // Demo mode — show sample data
-        await new Promise(r => setTimeout(r, 2500));
+      const useDemo = !ANTHROPIC_API_KEY;
+
+      if (useDemo) {
+        await new Promise(r => setTimeout(r, 2000));
         subs = DEMO_SUBSCRIPTIONS;
+      } else if (method === 'statement' && fileContent) {
+        subs = await analyzeStatement(fileContent, ANTHROPIC_API_KEY);
+      } else if (method === 'screenshot' && screenshotB64) {
+        subs = await analyzeScreenshot(screenshotB64, screenshotMime, ANTHROPIC_API_KEY);
+      } else if (method === 'email' && emailText.trim()) {
+        subs = await analyzeEmails(emailText, ANTHROPIC_API_KEY);
       } else {
-        subs = await analyzeSubscriptions(fileContent, ANTHROPIC_API_KEY);
+        subs = DEMO_SUBSCRIPTIONS;
       }
 
       router.push({ pathname: '/results', params: { data: JSON.stringify(subs) } });
@@ -73,249 +126,279 @@ export default function UploadScreen() {
     }
   }
 
+  const canAnalyze =
+    (method === 'statement' && !!fileName) ||
+    (method === 'screenshot' && !!screenshotB64) ||
+    (method === 'email' && emailText.trim().length > 20);
+
   return (
-    <ScrollView
-      style={styles.scroll}
-      contentContainerStyle={styles.container}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Header */}
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
       <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
         <Text style={styles.backText}>← Zurück</Text>
       </TouchableOpacity>
 
-      <Text style={styles.title}>Kontoauszug hochladen</Text>
-      <Text style={styles.subtitle}>
-        Exportiere deinen Kontoauszug als CSV oder PDF aus deinem Online-Banking.
-      </Text>
+      <Text style={styles.title}>Wie möchtest du starten?</Text>
+      <Text style={styles.subtitle}>Wähle eine Methode — du kannst sie jederzeit wechseln.</Text>
 
-      {/* Upload area */}
-      <TouchableOpacity
-        style={[styles.uploadArea, fileName && styles.uploadAreaActive]}
-        onPress={pickFile}
-        activeOpacity={0.8}
-      >
-        {fileName ? (
-          <>
-            <Text style={styles.uploadIconDone}>✅</Text>
-            <Text style={styles.uploadFileName}>{fileName}</Text>
-            <Text style={styles.uploadChange}>Andere Datei wählen</Text>
-          </>
-        ) : (
-          <>
-            <Text style={styles.uploadIcon}>📄</Text>
-            <Text style={styles.uploadTitle}>Datei auswählen</Text>
-            <Text style={styles.uploadHint}>CSV oder PDF · max. 10 MB</Text>
-          </>
-        )}
-      </TouchableOpacity>
-
-      {/* Demo button */}
-      <TouchableOpacity
-        style={styles.demoBtn}
-        onPress={() => {
-          setFileName('demo-kontoauszug.csv');
-          setFileContent('DEMO');
-        }}
-      >
-        <Text style={styles.demoBtnText}>Demo-Daten verwenden →</Text>
-      </TouchableOpacity>
-
-      {/* Supported banks */}
-      <Text style={styles.sectionLabel}>Unterstützte Banken</Text>
-      <View style={styles.banksGrid}>
-        {BANKS.map(b => (
-          <View key={b.name} style={styles.bankChip}>
-            <Text style={styles.bankFlag}>{b.flag}</Text>
-            <Text style={styles.bankName}>{b.name}</Text>
-          </View>
+      {/* 2×2 Method Grid */}
+      <View style={styles.methodGrid}>
+        {METHODS.map(m => (
+          <TouchableOpacity
+            key={m.id}
+            style={[styles.methodCard, method === m.id && styles.methodCardActive]}
+            onPress={() => {
+              setMethod(m.id);
+              if (m.id === 'manual') router.push('/manual');
+            }}
+            activeOpacity={0.75}
+          >
+            <Text style={styles.methodIcon}>{m.icon}</Text>
+            <Text style={[styles.methodTitle, method === m.id && styles.methodTitleActive]}>
+              {m.title}
+            </Text>
+            <Text style={styles.methodSub}>{m.sub}</Text>
+            {method === m.id && m.id !== 'manual' && (
+              <View style={styles.methodCheck}><Text style={styles.methodCheckText}>✓</Text></View>
+            )}
+          </TouchableOpacity>
         ))}
       </View>
 
-      {/* How to export */}
-      <View style={styles.howBox}>
-        <Text style={styles.howTitle}>Wie exportiere ich meinen Kontoauszug?</Text>
-        <Text style={styles.howStep}>1. Online-Banking öffnen</Text>
-        <Text style={styles.howStep}>2. Umsätze / Transaktionen aufrufen</Text>
-        <Text style={styles.howStep}>3. Export als CSV oder PDF wählen</Text>
-        <Text style={styles.howStep}>4. Datei hier hochladen</Text>
-      </View>
+      {/* ── Kontoauszug ── */}
+      {method === 'statement' && (
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={[styles.uploadArea, fileName && styles.uploadAreaActive]}
+            onPress={pickStatement}
+            activeOpacity={0.8}
+          >
+            {fileName ? (
+              <>
+                <Text style={styles.uploadIconDone}>✅</Text>
+                <Text style={styles.uploadFileName}>{fileName}</Text>
+                <Text style={styles.uploadChange}>Andere Datei wählen</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.uploadIcon}>📄</Text>
+                <Text style={styles.uploadTitle}>Datei auswählen</Text>
+                <Text style={styles.uploadHint}>CSV oder PDF · max. 10 MB</Text>
+              </>
+            )}
+          </TouchableOpacity>
 
-      {/* Privacy */}
-      <View style={styles.privacyBox}>
-        <Text style={styles.privacyIcon}>🔒</Text>
-        <Text style={styles.privacyText}>
-          Deine Bankdaten werden lokal analysiert und niemals auf fremde Server hochgeladen.
-        </Text>
-      </View>
+          <TouchableOpacity style={styles.demoBtn} onPress={() => { setFileName('demo.csv'); setFileContent('DEMO'); }}>
+            <Text style={styles.demoBtnText}>Demo-Daten verwenden →</Text>
+          </TouchableOpacity>
 
-      {/* CTA */}
-      <TouchableOpacity
-        style={[styles.analyzeBtn, !fileName && styles.analyzeBtnDisabled]}
-        onPress={analyze}
-        disabled={!fileName || loading}
-        activeOpacity={0.85}
-      >
-        {loading ? (
-          <ActivityIndicator color={colors.bg} />
-        ) : (
-          <Text style={styles.analyzeBtnText}>Abos analysieren →</Text>
-        )}
-      </TouchableOpacity>
+          <View style={styles.howBox}>
+            <Text style={styles.howTitle}>Kontoauszug exportieren</Text>
+            <Text style={styles.howStep}>1. Online-Banking öffnen</Text>
+            <Text style={styles.howStep}>2. Umsätze / Transaktionen aufrufen</Text>
+            <Text style={styles.howStep}>3. Export als CSV oder PDF wählen</Text>
+            <Text style={styles.howStep}>4. Datei hier hochladen</Text>
+          </View>
+        </View>
+      )}
+
+      {/* ── Screenshot ── */}
+      {method === 'screenshot' && (
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={[styles.uploadArea, screenshotB64 && styles.uploadAreaActive]}
+            onPress={pickScreenshot}
+            activeOpacity={0.8}
+          >
+            {screenshotB64 ? (
+              <>
+                <Text style={styles.uploadIconDone}>🖼️</Text>
+                <Text style={styles.uploadFileName}>{screenshotName}</Text>
+                <Text style={styles.uploadChange}>Anderes Foto wählen</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.uploadIcon}>📸</Text>
+                <Text style={styles.uploadTitle}>Foto auswählen</Text>
+                <Text style={styles.uploadHint}>Screenshot der Banking-App</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.demoBtn} onPress={() => { setScreenshotB64('DEMO'); setScreenshotName('demo-screenshot.jpg'); }}>
+            <Text style={styles.demoBtnText}>Demo-Daten verwenden →</Text>
+          </TouchableOpacity>
+
+          <View style={styles.howBox}>
+            <Text style={styles.howTitle}>So machst du den Screenshot</Text>
+            <Text style={styles.howStep}>1. Banking-App öffnen (George, N26, ING…)</Text>
+            <Text style={styles.howStep}>2. Zu Umsätze / Transaktionen navigieren</Text>
+            <Text style={styles.howStep}>3. Screenshot machen (Seitentaste + Lautstärke)</Text>
+            <Text style={styles.howStep}>4. Screenshot hier hochladen</Text>
+          </View>
+        </View>
+      )}
+
+      {/* ── E-Mail ── */}
+      {method === 'email' && (
+        <View style={styles.section}>
+          <View style={styles.emailBox}>
+            <Text style={styles.emailLabel}>Rechnungs-E-Mails hier einfügen</Text>
+            <TextInput
+              style={styles.emailInput}
+              multiline
+              placeholder={"Öffne deine Rechnungs-E-Mails in Gmail,\nkopiere den Text und füge ihn hier ein.\n\nBeispiel:\n'Deine Netflix-Rechnung: €13,99 am 15.07.2026'\n'Spotify Premium – Monatliche Zahlung: €9,99'"}
+              placeholderTextColor={colors.textTertiary}
+              value={emailText}
+              onChangeText={setEmailText}
+              textAlignVertical="top"
+            />
+            {emailText.length > 0 && (
+              <TouchableOpacity onPress={() => setEmailText('')} style={styles.clearBtn}>
+                <Text style={styles.clearBtnText}>✕ Löschen</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <TouchableOpacity style={styles.demoBtn} onPress={() => setEmailText('Netflix Rechnung: €13,99 am 15.07.2026\nSpotify Premium monatlich €9,99 am 20.07.2026\nAdobe Creative Cloud €54,99 Rechnung Juli 2026\nAmazon Prime Mitgliedschaft €8,99 am 10.07.2026')}>
+            <Text style={styles.demoBtnText}>Demo-Text einfügen →</Text>
+          </TouchableOpacity>
+
+          <View style={styles.howBox}>
+            <Text style={styles.howTitle}>So findest du Rechnungs-E-Mails</Text>
+            <Text style={styles.howStep}>1. Gmail öffnen</Text>
+            <Text style={styles.howStep}>2. Suche: "Rechnung" oder "invoice" oder "receipt"</Text>
+            <Text style={styles.howStep}>3. E-Mail-Texte kopieren und hier einfügen</Text>
+          </View>
+
+          <View style={styles.privacyBox}>
+            <Text style={styles.privacyIcon}>🔒</Text>
+            <Text style={styles.privacyText}>Deine E-Mail-Inhalte werden nur für die Analyse verwendet und nicht gespeichert.</Text>
+          </View>
+        </View>
+      )}
+
+      {/* ── Analyze Button ── */}
+      {method && method !== 'manual' && (
+        <TouchableOpacity
+          style={[styles.analyzeBtn, !canAnalyze && !loading && styles.analyzeBtnDisabled]}
+          onPress={analyze}
+          disabled={(!canAnalyze && !ANTHROPIC_API_KEY === false) || loading}
+          activeOpacity={0.85}
+        >
+          {loading
+            ? <ActivityIndicator color={colors.bg} />
+            : <Text style={styles.analyzeBtnText}>Abos analysieren →</Text>
+          }
+        </TouchableOpacity>
+      )}
+
+      {/* Demo fallback when no API key */}
+      {method && method !== 'manual' && !ANTHROPIC_API_KEY && !canAnalyze && (
+        <TouchableOpacity style={styles.analyzeBtn} onPress={analyze} activeOpacity={0.85}>
+          {loading
+            ? <ActivityIndicator color={colors.bg} />
+            : <Text style={styles.analyzeBtnText}>Demo starten →</Text>
+          }
+        </TouchableOpacity>
+      )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: colors.bg },
-  container: {
-    padding: 24,
-    paddingTop: 60,
-    paddingBottom: 48,
-  },
+  container: { padding: 24, paddingTop: 60, paddingBottom: 48 },
 
   backBtn: { marginBottom: 24 },
   backText: { color: colors.textSecondary, fontSize: 15 },
 
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: colors.textPrimary,
-    marginBottom: 10,
-    letterSpacing: -0.8,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: colors.textSecondary,
-    lineHeight: 22,
-    marginBottom: 28,
-  },
+  title: { fontSize: 26, fontWeight: '800', color: colors.textPrimary, marginBottom: 8, letterSpacing: -0.7 },
+  subtitle: { fontSize: 14, color: colors.textSecondary, lineHeight: 20, marginBottom: 24 },
 
-  // Upload
-  uploadArea: {
+  // Method grid
+  methodGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 28 },
+  methodCard: {
+    width: '47%',
     backgroundColor: colors.surface,
     borderRadius: 16,
-    borderWidth: 2,
+    padding: 18,
+    borderWidth: 1.5,
     borderColor: colors.border,
-    borderStyle: 'dashed',
-    padding: 36,
-    alignItems: 'center',
-    marginBottom: 12,
+    position: 'relative',
   },
-  uploadAreaActive: {
-    borderColor: colors.accent,
-    borderStyle: 'solid',
+  methodCardActive: { borderColor: colors.accent, backgroundColor: `${colors.accent}10` },
+  methodIcon: { fontSize: 28, marginBottom: 10 },
+  methodTitle: { fontSize: 15, fontWeight: '700', color: colors.textPrimary, marginBottom: 4 },
+  methodTitleActive: { color: colors.accent },
+  methodSub: { fontSize: 12, color: colors.textTertiary, lineHeight: 16 },
+  methodCheck: {
+    position: 'absolute', top: 10, right: 10,
+    width: 20, height: 20, borderRadius: 10,
+    backgroundColor: colors.accent,
+    alignItems: 'center', justifyContent: 'center',
   },
-  uploadIcon: { fontSize: 40, marginBottom: 12 },
-  uploadIconDone: { fontSize: 40, marginBottom: 12 },
-  uploadTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    marginBottom: 6,
+  methodCheckText: { fontSize: 11, color: colors.bg, fontWeight: '800' },
+
+  // Shared section
+  section: { gap: 14 },
+
+  // Upload area (statement + screenshot)
+  uploadArea: {
+    backgroundColor: colors.surface, borderRadius: 16,
+    borderWidth: 2, borderColor: colors.border, borderStyle: 'dashed',
+    padding: 32, alignItems: 'center',
   },
-  uploadFileName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.accent,
-    marginBottom: 6,
-  },
-  uploadHint: { fontSize: 13, color: colors.textTertiary },
-  uploadChange: { fontSize: 13, color: colors.textSecondary },
+  uploadAreaActive: { borderColor: colors.accent, borderStyle: 'solid' },
+  uploadIcon: { fontSize: 36, marginBottom: 10 },
+  uploadIconDone: { fontSize: 36, marginBottom: 10 },
+  uploadTitle: { fontSize: 16, fontWeight: '600', color: colors.textPrimary, marginBottom: 4 },
+  uploadFileName: { fontSize: 14, fontWeight: '600', color: colors.accent, marginBottom: 4 },
+  uploadHint: { fontSize: 12, color: colors.textTertiary },
+  uploadChange: { fontSize: 12, color: colors.textSecondary },
 
   // Demo
-  demoBtn: {
-    alignItems: 'center',
-    paddingVertical: 10,
-    marginBottom: 32,
-  },
-  demoBtnText: {
-    fontSize: 14,
-    color: colors.accent,
-    fontWeight: '500',
-  },
+  demoBtn: { alignItems: 'center', paddingVertical: 8 },
+  demoBtnText: { fontSize: 13, color: colors.accent, fontWeight: '500' },
 
-  // Banks
-  sectionLabel: {
-    fontSize: 12,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    color: colors.textTertiary,
-    marginBottom: 12,
-    fontWeight: '600',
+  // Email
+  emailBox: {
+    backgroundColor: colors.surface, borderRadius: 16,
+    borderWidth: 1, borderColor: colors.border, overflow: 'hidden',
   },
-  banksGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 28,
+  emailLabel: {
+    fontSize: 12, letterSpacing: 0.8, textTransform: 'uppercase',
+    color: colors.textTertiary, fontWeight: '700',
+    padding: 14, paddingBottom: 8,
   },
-  bankChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: colors.surface2,
-    borderRadius: 20,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+  emailInput: {
+    color: colors.textPrimary, fontSize: 14, lineHeight: 22,
+    padding: 14, paddingTop: 4, minHeight: 180,
   },
-  bankFlag: { fontSize: 14 },
-  bankName: { fontSize: 13, color: colors.textSecondary, fontWeight: '500' },
+  clearBtn: { padding: 12, alignItems: 'flex-end' },
+  clearBtnText: { fontSize: 12, color: colors.danger },
 
-  // How to
+  // How-to
   howBox: {
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: colors.surface, borderRadius: 14,
+    padding: 16, borderWidth: 1, borderColor: colors.border,
   },
-  howTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    marginBottom: 10,
-  },
-  howStep: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    lineHeight: 24,
-  },
+  howTitle: { fontSize: 13, fontWeight: '700', color: colors.textPrimary, marginBottom: 8 },
+  howStep: { fontSize: 13, color: colors.textSecondary, lineHeight: 24 },
 
   // Privacy
   privacyBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    backgroundColor: `${colors.accent}12`,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 28,
-    borderWidth: 1,
-    borderColor: `${colors.accent}25`,
+    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+    backgroundColor: `${colors.accent}10`, borderRadius: 12,
+    padding: 14, borderWidth: 1, borderColor: `${colors.accent}25`,
   },
-  privacyIcon: { fontSize: 18 },
-  privacyText: {
-    flex: 1,
-    fontSize: 13,
-    color: colors.accent,
-    lineHeight: 20,
-  },
+  privacyIcon: { fontSize: 16 },
+  privacyText: { flex: 1, fontSize: 12, color: colors.accent, lineHeight: 18 },
 
-  // Analyze
+  // Analyze button
   analyzeBtn: {
-    backgroundColor: colors.accent,
-    borderRadius: 14,
-    paddingVertical: 18,
-    alignItems: 'center',
+    backgroundColor: colors.accent, borderRadius: 14,
+    paddingVertical: 18, alignItems: 'center', marginTop: 8,
   },
-  analyzeBtnDisabled: {
-    backgroundColor: colors.surface2,
-  },
-  analyzeBtnText: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: colors.bg,
-  },
+  analyzeBtnDisabled: { backgroundColor: colors.surface2 },
+  analyzeBtnText: { fontSize: 16, fontWeight: '700', color: colors.bg },
 });
