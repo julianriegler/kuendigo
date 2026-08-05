@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Alert, ActivityIndicator, TextInput,
+  Alert, ActivityIndicator, TextInput, Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
@@ -12,6 +12,52 @@ import {
   DEMO_SUBSCRIPTIONS,
 } from '../utils/analyzeSubscriptions';
 import { getApiKey } from '../utils/storage';
+
+// ─── Image helpers (web only) ────────────────────────────────────────────────
+
+/** Resize a base64 image to max 1600px on longest side, returns JPEG base64 */
+async function resizeImageWeb(base64: string, mime: string): Promise<string> {
+  if (typeof document === 'undefined') return base64;
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 1600;
+      const scale = Math.min(MAX / img.width, MAX / img.height, 1);
+      const canvas = document.createElement('canvas');
+      canvas.width  = Math.round(img.width  * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', 0.82).split(',')[1]);
+    };
+    img.onerror = () => resolve(base64);
+    img.src = `data:${mime};base64,${base64}`;
+  });
+}
+
+/** Open a native <input type="file"> on web and return the chosen image */
+function pickImageWeb(): Promise<{ base64: string; mime: string; name: string } | null> {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type   = 'file';
+    input.accept = 'image/*';
+    input.onchange = async (e: any) => {
+      const file: File | undefined = e.target?.files?.[0];
+      if (!file) { resolve(null); return; }
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const dataUrl = reader.result as string;
+        const raw = dataUrl.split(',')[1];
+        const resized = await resizeImageWeb(raw, file.type);
+        resolve({ base64: resized, mime: 'image/jpeg', name: file.name });
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    };
+    // If the user cancels the dialog without picking a file
+    input.addEventListener('cancel', () => resolve(null));
+    input.click();
+  });
+}
 
 // ─── Source definitions ──────────────────────────────────────────────────────
 
@@ -171,40 +217,89 @@ export default function UploadScreen() {
   }
 
   async function pickFile() {
-    const result = await DocumentPicker.getDocumentAsync({
-      type: ['text/csv', 'text/plain', 'application/pdf'],
-      copyToCacheDirectory: true,
-    });
-    if (result.canceled) return;
-    const asset = result.assets[0];
-    setFileName(asset.name);
     try {
-      const content = await FileSystem.readAsStringAsync(asset.uri, {
-        encoding: FileSystem.EncodingType.UTF8,
-      });
-      setFileContent(content);
-    } catch {
-      setFileContent('[PDF]');
+      if (Platform.OS === 'web') {
+        // Web: native file input
+        await new Promise<void>((resolve) => {
+          const input = document.createElement('input');
+          input.type   = 'file';
+          input.accept = '.csv,.txt,.pdf,text/csv,text/plain,application/pdf';
+          input.onchange = (e: any) => {
+            const file: File | undefined = e.target?.files?.[0];
+            if (!file) { resolve(); return; }
+            setFileName(file.name);
+            const reader = new FileReader();
+            reader.onload = () => { setFileContent(reader.result as string); resolve(); };
+            reader.onerror = () => { setFileContent('[Lesefehler]'); resolve(); };
+            // PDFs can't be read as text — just mark them
+            if (file.type === 'application/pdf') {
+              setFileContent('[PDF — wird mit KI analysiert]');
+              resolve();
+            } else {
+              reader.readAsText(file, 'utf-8');
+            }
+          };
+          input.addEventListener('cancel', () => resolve());
+          input.click();
+        });
+      } else {
+        // Native
+        const result = await DocumentPicker.getDocumentAsync({
+          type: ['text/csv', 'text/plain', 'application/pdf'],
+          copyToCacheDirectory: true,
+        });
+        if (result.canceled) return;
+        const asset = result.assets[0];
+        setFileName(asset.name);
+        try {
+          const content = await FileSystem.readAsStringAsync(asset.uri, {
+            encoding: FileSystem.EncodingType.UTF8,
+          });
+          setFileContent(content);
+        } catch {
+          setFileContent('[PDF — wird mit KI analysiert]');
+        }
+      }
+    } catch (err: any) {
+      Alert.alert('Fehler', err?.message ?? 'Datei konnte nicht geöffnet werden.');
     }
   }
 
   async function pickScreenshot() {
-    const ImagePicker = await import('expo-image-picker');
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Berechtigung benötigt', 'Bitte erlaube den Zugriff auf deine Fotos.');
-      return;
+    try {
+      if (Platform.OS === 'web') {
+        // Web: use native <input type="file"> — more reliable than expo-image-picker on web
+        const picked = await pickImageWeb();
+        if (!picked) return;
+        setScreenshotB64(picked.base64);
+        setScreenshotMime(picked.mime);
+        setScreenshotName(picked.name);
+      } else {
+        // Native iOS / Android: use expo-image-picker
+        const ImagePicker = await import('expo-image-picker');
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Berechtigung benötigt', 'Bitte erlaube den Zugriff auf deine Fotos.');
+          return;
+        }
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          quality: 0.8,
+          base64: true,
+        });
+        if (result.canceled) return;
+        const asset = result.assets[0];
+        // Resize before storing so the API call doesn't fail on large images
+        const resized = asset.base64
+          ? await resizeImageWeb(asset.base64, asset.mimeType ?? 'image/jpeg')
+          : null;
+        setScreenshotB64(resized);
+        setScreenshotMime('image/jpeg');
+        setScreenshotName(asset.fileName ?? 'screenshot.jpg');
+      }
+    } catch (err: any) {
+      Alert.alert('Fehler beim Laden', err?.message ?? 'Foto konnte nicht geöffnet werden.');
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.85,
-      base64: true,
-    });
-    if (result.canceled) return;
-    const asset = result.assets[0];
-    setScreenshotB64(asset.base64 ?? null);
-    setScreenshotMime(asset.mimeType ?? 'image/jpeg');
-    setScreenshotName(asset.fileName ?? 'screenshot.jpg');
   }
 
   async function analyze() {
