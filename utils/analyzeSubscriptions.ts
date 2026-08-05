@@ -137,6 +137,112 @@ export async function autofillSubscription(
   return subs[0] ? { ...subs[0], name } : null;
 }
 
+// ─── Cancellation URLs ───────────────────────────────────────────────────────
+
+/**
+ * Direct cancellation URLs for popular subscription services.
+ * Matched case-insensitively against subscription names.
+ */
+export const CANCELLATION_URLS: Record<string, string> = {
+  'netflix':           'https://www.netflix.com/cancel',
+  'spotify':           'https://www.spotify.com/de/account/subscription/cancel',
+  'amazon prime':      'https://www.amazon.de/mc/pipelines/cancellation',
+  'amazon':            'https://www.amazon.de/mc/pipelines/cancellation',
+  'disney+':           'https://www.disneyplus.com/account/subscription',
+  'disney plus':       'https://www.disneyplus.com/account/subscription',
+  'apple tv+':         'https://tv.apple.com/settings',
+  'apple tv':          'https://tv.apple.com/settings',
+  'youtube premium':   'https://www.youtube.com/paid_memberships',
+  'youtube':           'https://www.youtube.com/paid_memberships',
+  'apple icloud':      'https://appleid.apple.com/account/manage',
+  'icloud':            'https://appleid.apple.com/account/manage',
+  'google one':        'https://one.google.com/storage/dashboard',
+  'dropbox':           'https://www.dropbox.com/account/plan',
+  'adobe':             'https://account.adobe.com/plans',
+  'adobe creative':    'https://account.adobe.com/plans',
+  'microsoft 365':     'https://account.microsoft.com/services',
+  'microsoft':         'https://account.microsoft.com/services',
+  'office 365':        'https://account.microsoft.com/services',
+  'linkedin':          'https://www.linkedin.com/premium/manage-subscription',
+  'linkedin premium':  'https://www.linkedin.com/premium/manage-subscription',
+  'chatgpt':           'https://chat.openai.com/#settings/Subscription',
+  'chatgpt plus':      'https://chat.openai.com/#settings/Subscription',
+  'openai':            'https://chat.openai.com/#settings/Subscription',
+  'xbox':              'https://account.microsoft.com/services',
+  'xbox game pass':    'https://account.microsoft.com/services',
+  'playstation':       'https://www.playstation.com/de-at/my-playstation/account-management/',
+  'playstation plus':  'https://www.playstation.com/de-at/my-playstation/account-management/',
+  'ps plus':           'https://www.playstation.com/de-at/my-playstation/account-management/',
+  'headspace':         'https://www.headspace.com/account',
+  'calm':              'https://account.calm.com/settings',
+  'freeletics':        'https://www.freeletics.com/de/account/',
+  'spiegel':           'https://www.spiegel.de/meinabo/',
+  'spiegel+':          'https://www.spiegel.de/meinabo/',
+  'bild+':             'https://mein.bild.de/abo/',
+  'bild':              'https://mein.bild.de/abo/',
+  'paypal':            'https://www.paypal.com/myaccount/autopay',
+  'dazn':              'https://www.dazn.com/de-AT/account/subscription',
+  'sky':               'https://sky.at/kundenportal',
+  'magenta':           'https://www.magenta.at/mein-magenta',
+  'a1':                'https://www.a1.net/mein-a1',
+  'drei':              'https://www.drei.at/mein-drei',
+  'duolingo':          'https://www.duolingo.com/settings/subscription',
+  'audible':           'https://www.audible.de/account/cancelMembership',
+  'kindle':            'https://www.amazon.de/mc/pipelines/cancellation',
+  'apple arcade':      'https://appleid.apple.com/account/manage',
+  'apple music':       'https://music.apple.com/account',
+  'apple fitness':     'https://appleid.apple.com/account/manage',
+  'apple news':        'https://appleid.apple.com/account/manage',
+  'apple one':         'https://appleid.apple.com/account/manage',
+  'tidal':             'https://account.tidal.com/subscription',
+  'deezer':            'https://www.deezer.com/de/offers',
+  'hbo':               'https://www.max.com/account/subscription',
+  'max':               'https://www.max.com/account/subscription',
+  'paramount':         'https://www.paramountplus.com/account/billing/',
+  'paramount+':        'https://www.paramountplus.com/account/billing/',
+  'peloton':           'https://members.onepeloton.de/account',
+  'fitbit':            'https://www.fitbit.com/settings/account',
+  'strava':            'https://www.strava.com/settings/subscription',
+  'notion':            'https://www.notion.so/profile/billing',
+  'evernote':          'https://www.evernote.com/Subscription.action',
+  'canva':             'https://www.canva.com/settings/billing',
+  'figma':             'https://www.figma.com/settings',
+  'slack':             'https://slack.com/intl/de-de/services/account/billing',
+  'zoom':              'https://zoom.us/billing',
+  'grammarly':         'https://account.grammarly.com/subscription',
+  'lastpass':          'https://lastpass.com/de/subscriptions/',
+  '1password':         'https://my.1password.com/billing',
+  'nordvpn':           'https://my.nordaccount.com/dashboard/nordvpn/',
+  'expressvpn':        'https://www.expressvpn.com/de/subscriptions',
+  'surfshark':         'https://my.surfshark.com/account',
+};
+
+/**
+ * Returns the direct cancellation URL for a given subscription name.
+ * Matches case-insensitively and tries partial matches.
+ */
+export function getCancellationUrl(name: string): string | null {
+  const lower = name.toLowerCase().trim();
+  // exact match first
+  if (CANCELLATION_URLS[lower]) return CANCELLATION_URLS[lower];
+  // partial match
+  for (const [key, url] of Object.entries(CANCELLATION_URLS)) {
+    if (lower.includes(key) || key.includes(lower)) return url;
+  }
+  return null;
+}
+
+/**
+ * Returns how many days until the next charge.
+ * Negative = already overdue.
+ */
+export function daysUntilCharge(nextCharge: string): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const next = new Date(nextCharge);
+  return Math.round((next.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
 // ─── Demo data ───────────────────────────────────────────────────────────────
 
 export const DEMO_SUBSCRIPTIONS: Subscription[] = [
