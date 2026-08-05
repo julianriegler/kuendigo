@@ -1,14 +1,28 @@
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors } from '../constants/theme';
+import { getApiKey } from '../utils/storage';
 
 const { width } = Dimensions.get('window');
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const hasKey = !!getApiKey();
 
   return (
     <View style={styles.container}>
+      {/* Settings button */}
+      <TouchableOpacity style={styles.settingsBtn} onPress={() => router.push('/settings')}>
+        <Text style={styles.settingsIcon}>⚙️</Text>
+      </TouchableOpacity>
+
+      {/* Demo mode badge */}
+      {!hasKey && (
+        <TouchableOpacity style={styles.demoBadge} onPress={() => router.push('/settings')}>
+          <Text style={styles.demoBadgeText}>Demo-Modus · API Key eintragen →</Text>
+        </TouchableOpacity>
+      )}
+
       {/* Background rings (decorative) */}
       <View style={styles.ring3} />
       <View style={styles.ring2} />
@@ -207,5 +221,32 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textTertiary,
     textAlign: 'center',
+  },
+
+  // Settings
+  settingsBtn: {
+    position: 'absolute',
+    top: 56,
+    right: 24,
+    padding: 8,
+  },
+  settingsIcon: { fontSize: 22 },
+
+  // Demo badge
+  demoBadge: {
+    position: 'absolute',
+    top: 56,
+    left: 24,
+    backgroundColor: `${colors.warning}20`,
+    borderRadius: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: `${colors.warning}40`,
+  },
+  demoBadgeText: {
+    fontSize: 11,
+    color: colors.warning,
+    fontWeight: '600',
   },
 });

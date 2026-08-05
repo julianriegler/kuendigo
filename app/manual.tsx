@@ -1,14 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  TextInput, Alert, ActivityIndicator, FlatList,
+  TextInput, Alert, ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors, categories } from '../constants/theme';
 import { autofillSubscription, POPULAR_SERVICES, DEMO_SUBSCRIPTIONS, Subscription } from '../utils/analyzeSubscriptions';
-
-// ← Trage hier deinen Anthropic API Key ein (oder sync mit upload.tsx)
-const ANTHROPIC_API_KEY = '';
+import { getApiKey } from '../utils/storage';
 
 const FREQUENCIES: { id: Subscription['frequency']; label: string }[] = [
   { id: 'monthly',   label: 'Monatlich' },
@@ -21,6 +19,9 @@ const CATEGORY_KEYS = Object.keys(categories) as (keyof typeof categories)[];
 
 export default function ManualScreen() {
   const router = useRouter();
+
+  const [apiKey, setApiKeyState] = useState('');
+  useEffect(() => { setApiKeyState(getApiKey()); }, []);
 
   // List of manually added subscriptions
   const [subs, setSubs] = useState<Subscription[]>([]);
@@ -41,9 +42,11 @@ export default function ManualScreen() {
   async function handleAutofill(serviceName: string) {
     setName(serviceName);
     setAutofilling(true);
+    const key = getApiKey();
+    setApiKeyState(key);
     try {
-      const sub = ANTHROPIC_API_KEY
-        ? await autofillSubscription(serviceName, ANTHROPIC_API_KEY)
+      const sub = key
+        ? await autofillSubscription(serviceName, key)
         : DEMO_SUBSCRIPTIONS.find(d => d.name.toLowerCase().includes(serviceName.toLowerCase())) ?? null;
 
       if (sub) {
