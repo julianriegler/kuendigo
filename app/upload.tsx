@@ -183,6 +183,7 @@ export default function UploadScreen() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [apiKey, setApiKeyState] = useState('');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
     setApiKeyState(getApiKey());
@@ -310,6 +311,7 @@ export default function UploadScreen() {
     const key = getApiKey();
     setApiKeyState(key);
 
+    setErrorMsg(null);
     setLoading(true);
     try {
       let subs;
@@ -330,7 +332,10 @@ export default function UploadScreen() {
       }
       router.push({ pathname: '/results', params: { data: JSON.stringify(subs) } });
     } catch (err: any) {
-      Alert.alert('Fehler', err.message ?? 'Analyse fehlgeschlagen');
+      const msg: string = err?.message ?? 'Analyse fehlgeschlagen';
+      setErrorMsg(msg);
+      // Also try native Alert as fallback
+      try { Alert.alert('Fehler', msg); } catch {}
     } finally {
       setLoading(false);
     }
@@ -372,6 +377,15 @@ export default function UploadScreen() {
             <Text style={styles.demoBannerSub}>Screenshots werden NICHT analysiert. Tippe hier um deinen Key einzutragen.</Text>
           </View>
           <Text style={styles.demoBannerArrow}>→</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Error banner */}
+      {errorMsg && (
+        <TouchableOpacity style={styles.errorBanner} onPress={() => setErrorMsg(null)} activeOpacity={0.8}>
+          <Text style={styles.errorBannerIcon}>❌</Text>
+          <Text style={styles.errorBannerText}>{errorMsg}</Text>
+          <Text style={styles.errorBannerClose}>✕</Text>
         </TouchableOpacity>
       )}
 
@@ -696,6 +710,17 @@ const styles = StyleSheet.create({
   },
   analyzeBtnDemo: { backgroundColor: colors.accentDark },
   analyzeBtnText: { fontSize: 15, fontWeight: '700', color: colors.bg },
+
+  // Error banner
+  errorBanner: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+    backgroundColor: `${colors.danger}15`,
+    borderRadius: 12, padding: 14, marginBottom: 12,
+    borderWidth: 1, borderColor: `${colors.danger}40`,
+  },
+  errorBannerIcon: { fontSize: 16 },
+  errorBannerText: { flex: 1, fontSize: 13, color: colors.danger, lineHeight: 19 },
+  errorBannerClose: { fontSize: 13, color: colors.danger },
 
   // Privacy
   privacyRow: {

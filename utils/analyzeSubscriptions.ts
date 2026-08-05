@@ -59,6 +59,8 @@ async function callClaude(
       'Content-Type': 'application/json',
       'x-api-key': apiKey,
       'anthropic-version': '2023-06-01',
+      // Required for browser-side API calls
+      'anthropic-dangerous-allow-browser': 'true',
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
@@ -67,7 +69,11 @@ async function callClaude(
     }),
   });
 
-  if (!response.ok) throw new Error(`API Fehler: ${response.status}`);
+  if (!response.ok) {
+    const errBody = await response.json().catch(() => ({}));
+    const msg = (errBody as any)?.error?.message ?? `HTTP ${response.status}`;
+    throw new Error(`Anthropic API: ${msg}`);
+  }
   const data = await response.json();
   return data.content[0]?.text ?? '[]';
 }
