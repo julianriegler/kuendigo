@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { colors, categories } from '../constants/theme';
 import { autofillSubscription, POPULAR_SERVICES, DEMO_SUBSCRIPTIONS, Subscription } from '../utils/analyzeSubscriptions';
 import { getApiKey } from '../utils/storage';
+import { setResults } from '../utils/resultStore';
 
 const FREQUENCIES: { id: Subscription['frequency']; label: string }[] = [
   { id: 'monthly',   label: 'Monatlich' },
@@ -96,7 +97,8 @@ export default function ManualScreen() {
     if (subs.length === 0) {
       return Alert.alert('Keine Abos', 'Füge zuerst mindestens ein Abo hinzu.');
     }
-    router.push({ pathname: '/results', params: { data: JSON.stringify(subs) } });
+    setResults(subs);
+    router.push('/results');
   }
 
   return (

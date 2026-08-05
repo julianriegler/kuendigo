@@ -1,8 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Share, Linking, Platform } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { colors, categories } from '../constants/theme';
 import type { Subscription } from '../utils/analyzeSubscriptions';
-import { getCancellationUrl, daysUntilCharge } from '../utils/analyzeSubscriptions';
+import { getCancellationUrl, daysUntilCharge, DEMO_SUBSCRIPTIONS } from '../utils/analyzeSubscriptions';
+import { getResults } from '../utils/resultStore';
 
 function formatEur(amount: number) {
   return `€${amount.toFixed(2).replace('.', ',')}`;
@@ -119,11 +120,10 @@ function SubscriptionCard({ sub }: { sub: Subscription }) {
 
 export default function ResultsScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams();
 
-  const subscriptions: Subscription[] = params.data
-    ? JSON.parse(params.data as string)
-    : [];
+  // Load from global store — avoids URL-param encoding issues on web
+  const stored = getResults();
+  const subscriptions: Subscription[] = stored.length > 0 ? stored : DEMO_SUBSCRIPTIONS;
 
   const totalMonthly = subscriptions.reduce((sum, s) => sum + monthlyAmount(s), 0);
   const totalAnnual = totalMonthly * 12;

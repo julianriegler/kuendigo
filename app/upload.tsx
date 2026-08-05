@@ -12,6 +12,7 @@ import {
   DEMO_SUBSCRIPTIONS,
 } from '../utils/analyzeSubscriptions';
 import { getApiKey } from '../utils/storage';
+import { setResults } from '../utils/resultStore';
 
 // ─── Image helpers (web only) ────────────────────────────────────────────────
 
@@ -330,7 +331,8 @@ export default function UploadScreen() {
         await new Promise(r => setTimeout(r, 1800));
         subs = DEMO_SUBSCRIPTIONS;
       }
-      router.push({ pathname: '/results', params: { data: JSON.stringify(subs) } });
+      setResults(subs ?? []);
+      router.push('/results');
     } catch (err: any) {
       const msg: string = err?.message ?? 'Analyse fehlgeschlagen';
       setErrorMsg(msg);
