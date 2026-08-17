@@ -7,40 +7,16 @@
  *
  *   node scripts/web-test/run.mjs
  */
-import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-import { extname, join, normalize } from 'node:path';
+import { join } from 'node:path';
 import { chromium } from 'playwright-core';
+import { startStaticServer } from '../dev-static.mjs';
 
 const DIST = join(process.cwd(), 'dist');
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
-const MIME = {
-  '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
-  '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg',
-  '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.ttf': 'font/ttf',
-  '.woff': 'font/woff', '.woff2': 'font/woff2', '.map': 'application/json',
-};
-
-const server = createServer(async (req, res) => {
-  const url = decodeURIComponent((req.url ?? '/').split('?')[0]);
-  let file = join(DIST, normalize(url).replace(/^(\.\.[/\\])+/, ''));
-  if (!existsSync(file) || url.endsWith('/')) {
-    const html = `${file.replace(/\/$/, '')}.html`;
-    file = existsSync(html) ? html : join(DIST, 'index.html');
-  }
-  try {
-    const body = await readFile(file);
-    res.writeHead(200, { 'Content-Type': MIME[extname(file)] ?? 'application/octet-stream' });
-    res.end(body);
-  } catch {
-    res.writeHead(404).end('not found');
-  }
-});
-
-await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-const base = `http://127.0.0.1:${server.address().port}`;
+// Derselbe SPA-Fallback wie der Rewrite in vercel.json
+const { server, base } = await startStaticServer(DIST);
 console.log(`Server: ${base}`);
 
 let failed = 0;
@@ -159,6 +135,184 @@ try {
   check('Leerzustand wird angezeigt', await page.getByText(/Keine gespeicherten Abos/).count() > 0);
   await open('/');
   check('Kachel verschwindet ohne Abos', await page.getByText(/\d+ Abos · €/).count() === 0);
+
+  // 9) Rechtsseiten: direkt aufrufbar und aus dem Fuß verlinkt
+  await open('/impressum');
+  await page.getByText('Impressum').first().waitFor({ timeout: 30000 });
+  check('Impressum ist direkt aufrufbar',
+    await page.getByText(/§ 5 E-Commerce-Gesetz/).count() > 0);
+  check('Impressum nennt die Pflichtangaben',
+    (await page.getByText(/Unternehmensgegenstand/).count()) > 0
+    && (await page.getByText(/UID-Nummer/).count()) > 0
+    && (await page.getByText(/Blattlinie/).count()) > 0);
+
+  await open('/datenschutz');
+  await page.getByText('1. Verantwortlicher').waitFor({ timeout: 30000 });
+  check('Datenschutz ist direkt aufrufbar',
+    await page.getByText(/Anthropic PBC/).count() > 0);
+  check('Datenschutz nennt Drittland, Rechtsgrundlagen und Behörde',
+    (await page.getByText(/Drittlandtransfer in die USA/).count()) > 0
+    && (await page.getByText(/Art. 6 Abs. 1 lit. b DSGVO/).count()) > 0
+    && (await page.getByText(/Österreichische Datenschutzbehörde/).count()) > 0);
+
+  await open('/');
+  await page.getByText('Jetzt analysieren →').waitFor({ timeout: 30000 });
+  await page.getByText('Datenschutz', { exact: true }).first().click();
+  await page.getByText('1. Verantwortlicher').waitFor({ timeout: 15000 });
+  check('Fußlink auf dem Startscreen führt zum Datenschutz',
+    await page.getByText(/Verantwortlicher/).count() > 0);
+
+  await page.getByText('← Zurück').first().click();
+  await page.getByText('Jetzt analysieren →').waitFor({ timeout: 15000 });
+  check('Zurück führt wieder auf den Startscreen', true);
+
+  // Einwilligungshinweis dort, wo die Übermittlung ausgelöst wird
+  await open('/upload');
+  await page.getByText('Wo sind deine Abos?').waitFor({ timeout: 30000 });
+  check('Upload nennt Anthropic und die USA vor der Analyse',
+    await page.getByText(/an Anthropic in den USA/).count() > 0);
+  await page.getByText('Details in der Datenschutzerklärung →').click();
+  await page.getByText('1. Verantwortlicher').waitFor({ timeout: 15000 });
+  check('Hinweis im Upload verlinkt die Datenschutzerklärung',
+    await page.getByText(/Drittlandtransfer in die USA/).count() > 0);
+
+  // 10) Einwilligung vor der ersten Übertragung
+  const consent = () => page.evaluate(() => {
+    const raw = window.localStorage.getItem('kuendigo_consent_v1');
+    return raw ? JSON.parse(raw) : null;
+  });
+
+  await open('/upload');
+  await page.getByText('Wo sind deine Abos?').waitFor({ timeout: 30000 });
+  await page.getByText('Girokonto').first().click();
+  await page.getByText('Beispiel-Auszug einsetzen →').click();
+  await page.getByText('Abos analysieren →').click();
+  await page.getByText('Analyse durch Anthropic').waitFor({ timeout: 15000 });
+  check('Analyse öffnet zuerst die Einwilligungsabfrage', true);
+  check('Abfrage nennt Anthropic, USA und Widerruf',
+    (await page.getByText(/an Anthropic PBC in die USA übertragen/).count()) > 0
+    && (await page.getByText(/freiwillig und jederzeit widerrufbar/).count()) > 0
+    && (await page.getByText(/speichert diese Inhalte nicht/).count()) > 0);
+
+  // Der Link zur Erklärung schließt die Abfrage, statt sie darüber zu lassen
+  await page.getByText('Zur Datenschutzerklärung →').click();
+  await page.getByText('1. Verantwortlicher').waitFor({ timeout: 15000 });
+  // Das Sheet muss verschwinden, sonst liegt es über der Erklärung
+  await page.getByText('Analyse durch Anthropic').waitFor({ state: 'hidden', timeout: 10000 });
+  check('Link aus der Abfrage öffnet die Erklärung lesbar',
+    await page.getByText(/Drittlandtransfer in die USA/).count() > 0);
+  check('Link speichert keine Einwilligung', (await consent()) === null);
+
+  await open('/upload');
+  await page.getByText('Wo sind deine Abos?').waitFor({ timeout: 30000 });
+  await page.getByText('Girokonto').first().click();
+  await page.getByText('Beispiel-Auszug einsetzen →').click();
+  await page.getByText('Abos analysieren →').click();
+  await page.getByText('Analyse durch Anthropic').waitFor({ timeout: 15000 });
+
+  // Ohne Häkchen bleibt Zustimmen wirkungslos
+  await page.getByText('Zustimmen').click();
+  check('ohne Häkchen wird nichts gespeichert', (await consent()) === null);
+  check('Abfrage bleibt ohne Häkchen offen',
+    await page.getByText('Analyse durch Anthropic').isVisible());
+
+  // Abbrechen blockiert die Analyse
+  await page.getByText('Abbrechen').click();
+  await page.getByText('Analyse durch Anthropic').waitFor({ state: 'hidden', timeout: 10000 });
+  check('Abbrechen speichert keine Einwilligung', (await consent()) === null);
+  check('Abbrechen überträgt nichts', !page.url().includes('/results'));
+
+  // Mit Häkchen zustimmen
+  await page.getByText('Abos analysieren →').click();
+  await page.getByText('Analyse durch Anthropic').waitFor({ timeout: 15000 });
+  await page.getByLabel(/Ich stimme der Übertragung/).click();
+  await page.getByText('Zustimmen').click();
+  await page.waitForFunction(() => !!localStorage.getItem('kuendigo_consent_v1'), null, { timeout: 10000 });
+  const stored = await consent();
+  check('Zeitpunkt und Textversion werden gespeichert',
+    typeof stored?.grantedAt === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(stored.grantedAt)
+    && typeof stored?.version === 'string' && stored.text.includes('Anthropic'),
+    { grantedAt: stored?.grantedAt, version: stored?.version });
+
+  // Status und Widerruf in den Einstellungen
+  await open('/settings');
+  await page.getByText('🤝 Einwilligung in die Analyse').waitFor({ timeout: 30000 });
+  const status = await page.getByText(/✓ Erteilt am/).first().textContent();
+  check('Einstellungen zeigen den Einwilligungsstatus mit Datum',
+    /^✓ Erteilt am \d\d\.\d\d\.\d{4} um \d\d:\d\d Uhr$/.test(status ?? ''), status);
+
+  await page.getByText('Einwilligung widerrufen').click();
+  await page.waitForFunction(() => !localStorage.getItem('kuendigo_consent_v1'), null, { timeout: 10000 });
+  check('Widerruf löscht die gespeicherte Einwilligung', (await consent()) === null);
+  check('Status wechselt auf nicht erteilt',
+    await page.getByText(/○ Noch nicht erteilt/).count() > 0);
+
+  // Nach dem Widerruf wird erneut gefragt
+  await open('/upload');
+  await page.getByText('Wo sind deine Abos?').waitFor({ timeout: 30000 });
+  await page.getByText('Girokonto').first().click();
+  await page.getByText('Beispiel-Auszug einsetzen →').click();
+  await page.getByText('Abos analysieren →').click();
+  await page.getByText('Analyse durch Anthropic').waitFor({ timeout: 15000 });
+  check('nach Widerruf erscheint die Abfrage erneut', true);
+
+  // 11) Startseite auf schmalen Bildschirmen
+  for (const [w, h] of [[320, 568], [360, 640]]) {
+    await page.setViewportSize({ width: w, height: h });
+    await open('/');
+    await page.getByText('Jetzt analysieren →').waitFor({ timeout: 30000 });
+
+    const box = await page.evaluate(() => {
+      const el = document.scrollingElement || document.documentElement;
+      return { scrollWidth: el.scrollWidth, clientWidth: el.clientWidth };
+    });
+    check(`kein horizontaler Überlauf bei ${w}px`,
+      box.scrollWidth <= box.clientWidth + 1, box);
+
+    // Die dekorativen Ringe ragen bewusst hinaus und werden beschnitten,
+    // geprüft wird deshalb nur Inhalt mit Text.
+    const clipped = await page.evaluate(vw => [...document.querySelectorAll('div, span, a')]
+      .filter(n => (n.textContent ?? '').trim().length > 0)
+      .filter(n => {
+        const r = n.getBoundingClientRect();
+        return r.width > 0 && (r.right > vw + 1 || r.left < -1);
+      })
+      .map(n => (n.textContent ?? '').trim().slice(0, 40)), w);
+    check(`kein Text ragt über den Bildschirm hinaus bei ${w}px`, clipped.length === 0, clipped);
+
+    check(`Schätzwerte sind als solche gekennzeichnet (${w}px)`,
+      (await page.getByText('Schätzwerte').first().isVisible())
+      && (await page.getByText(/Durchschnittsschätzung aus Erfahrungswerten/).count()) > 0);
+
+    await page.getByText(/Zur Datenschutzerklärung/).first().scrollIntoViewIfNeeded();
+    check(`Datenschutzhinweis erreichbar bei ${w}px`,
+      await page.getByText(/verschlüsselt an unseren KI-Dienstleister/).first().isVisible());
+    check(`Fußlinks erreichbar bei ${w}px`,
+      (await page.getByText('Impressum').first().isVisible())
+      && (await page.getByText('Datenschutz', { exact: true }).first().isVisible()));
+    check(`Analyse-Knopf erreichbar bei ${w}px`,
+      await page.getByText('Jetzt analysieren →').isVisible());
+  }
+
+  // Link im Fußhinweis: per Tastatur erreichbar und führt zur Erklärung
+  const linkFocusable = await page.evaluate(() => {
+    const el = [...document.querySelectorAll('div, span, a')]
+      .find(n => (n.textContent ?? '').trim() === 'Zur Datenschutzerklärung');
+    return el ? { role: el.getAttribute('role'), tabindex: el.getAttribute('tabindex') } : null;
+  });
+  check('Inline-Link ist als Link ausgezeichnet und fokussierbar',
+    linkFocusable?.role === 'link' && linkFocusable?.tabindex !== null, linkFocusable);
+
+  await page.getByText(/Zur Datenschutzerklärung/).first().click();
+  await page.getByText('1. Verantwortlicher').waitFor({ timeout: 15000 });
+  check('Fußhinweis verlinkt die Datenschutzerklärung',
+    await page.getByText(/Drittlandtransfer in die USA/).count() > 0);
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  // Vercel liefert unbekannte Pfade an die SPA aus, sonst wären die Routen 404
+  const rewrites = JSON.parse(await readFile(join(process.cwd(), 'vercel.json'), 'utf8')).rewrites ?? [];
+  check('vercel.json leitet alle Seitenpfade auf index.html',
+    rewrites.some(r => r.source === '/(.*)' && r.destination === '/index.html'), rewrites);
 } catch (err) {
   console.log(`FEHL Testlauf abgebrochen -> ${err.message}`);
   failed++;

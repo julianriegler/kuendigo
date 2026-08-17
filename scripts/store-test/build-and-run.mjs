@@ -13,24 +13,20 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..');
-const generated = [join(here, 'resultStore.gen.ts'), join(here, 'kvStorage.gen.ts')];
+const MODULES = ['kvStorage', 'resultStore', 'consent'];
+const generated = MODULES.map(name => join(here, `${name}.gen.ts`));
 
-const patchPlatform = src => src
+const patch = src => src
   .replace("import { Platform } from 'react-native';", "import { Platform } from './shim.ts';")
   .replace(
     "import AsyncStorage from '@react-native-async-storage/async-storage';",
     "import AsyncStorage from './shim.ts';",
-  );
+  )
+  .replace(/from '\.\/kvStorage'/g, "from './kvStorage.gen.ts'");
 
-writeFileSync(
-  generated[0],
-  patchPlatform(readFileSync(join(root, 'utils', 'resultStore.ts'), 'utf8'))
-    .replace("from './kvStorage'", "from './kvStorage.gen.ts'"),
-);
-writeFileSync(
-  generated[1],
-  patchPlatform(readFileSync(join(root, 'utils', 'kvStorage.ts'), 'utf8')),
-);
+MODULES.forEach((name, i) => {
+  writeFileSync(generated[i], patch(readFileSync(join(root, 'utils', `${name}.ts`), 'utf8')));
+});
 
 const run = spawnSync(
   process.execPath,

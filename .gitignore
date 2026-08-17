@@ -44,3 +44,4 @@ yarn-error.*
 # Generierte Testkopie
 scripts/store-test/resultStore.gen.ts
 scripts/store-test/kvStorage.gen.ts
+scripts/store-test/consent.gen.ts

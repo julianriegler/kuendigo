@@ -7,6 +7,15 @@ import { useRouter } from 'expo-router';
 import { colors } from '../constants/theme';
 import { loadApiKey, setApiKey, clearApiKey } from '../utils/storage';
 import { fetchQuota, getCachedQuota, quotaAvailable, type Quota } from '../utils/quota';
+import { loadConsent, revokeConsent, isConsentValid, type Consent } from '../utils/consent';
+
+/** ISO-Zeitpunkt als TT.MM.JJJJ um HH:MM. */
+function formatConsentDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} um ${pad(d.getHours())}:${pad(d.getMinutes())} Uhr`;
+}
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -15,6 +24,7 @@ export default function SettingsScreen() {
   const [hasKey, setHasKey] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [quota, setQuota] = useState<Quota | null>(getCachedQuota());
+  const [consent, setConsent] = useState<Consent | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -25,6 +35,8 @@ export default function SettingsScreen() {
         setKey(existing);
         setHasKey(true);
       }
+      const stored = await loadConsent();
+      if (alive) setConsent(stored);
       const q = await fetchQuota();
       if (alive && q) setQuota(q);
     })();
@@ -32,6 +44,22 @@ export default function SettingsScreen() {
   }, []);
 
   const hasFreeQuota = quotaAvailable();
+  const consentGranted = isConsentValid(consent);
+
+  async function revoke() {
+    const text = 'Vor der nächsten Analyse fragt Kündigo dich erneut. Bereits erkannte Abos bleiben erhalten.';
+    const ok = Platform.OS === 'web'
+      ? window.confirm(`Einwilligung widerrufen?\n\n${text}`)
+      : await new Promise<boolean>(resolve => {
+          Alert.alert('Einwilligung widerrufen?', text, [
+            { text: 'Abbrechen', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Widerrufen', style: 'destructive', onPress: () => resolve(true) },
+          ]);
+        });
+    if (!ok) return;
+    await revokeConsent();
+    setConsent(null);
+  }
 
   async function save() {
     const trimmed = key.trim();
@@ -177,12 +205,57 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+      {/* Einwilligung */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>🤝 Einwilligung in die Analyse</Text>
+        <View style={[styles.consentStatus, consentGranted && styles.consentStatusActive]}>
+          <Text style={[styles.consentStatusText, consentGranted && { color: colors.accent }]}>
+            {consentGranted
+              ? `✓ Erteilt am ${formatConsentDate(consent!.grantedAt)}`
+              : consent
+                ? `⟳ Veraltet, erteilt am ${formatConsentDate(consent.grantedAt)}`
+                : '○ Noch nicht erteilt'}
+          </Text>
+          <Text style={styles.consentStatusSub}>
+            {consentGranted
+              ? `Textversion ${consent!.version}. Sie gilt für die Übertragung deiner hochgeladenen Inhalte an Anthropic in den USA.`
+              : consent
+                ? `Der Einwilligungstext hat sich seit Version ${consent.version} geändert. Vor der nächsten Analyse fragt Kündigo erneut.`
+                : 'Vor der ersten Analyse fragt Kündigo dich einmal um Zustimmung. Ohne sie wird nichts übertragen.'}
+          </Text>
+        </View>
+
+        {consent && (
+          <TouchableOpacity style={styles.revokeBtn} onPress={revoke} activeOpacity={0.8}>
+            <Text style={styles.revokeBtnText}>
+              {consentGranted ? 'Einwilligung widerrufen' : 'Alte Einwilligung löschen'}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Rechtliches */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Rechtliches</Text>
+        <TouchableOpacity style={styles.legalRow} onPress={() => router.push('/impressum')} activeOpacity={0.7}>
+          <Text style={styles.legalRowText}>Impressum</Text>
+          <Text style={styles.legalRowArrow}>→</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.legalRow} onPress={() => router.push('/datenschutz')} activeOpacity={0.7}>
+          <Text style={styles.legalRowText}>Datenschutzerklärung</Text>
+          <Text style={styles.legalRowArrow}>→</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Privacy */}
       <View style={styles.privacyBox}>
         <Text style={styles.privacyTitle}>🔒 Datenschutz</Text>
         <Text style={styles.privacyText}>
-          Dein API Key wird ausschließlich lokal auf deinem Gerät gespeichert. Für die Analyse geht er zusammen mit deinen Daten über den Kündigo-Proxy an Anthropic, wird dort aber nicht gespeichert. Für das Freikontingent zählt Kündigo nur eine anonyme Geräte-Kennung und die Anzahl deiner Analysen pro Monat, ohne Namen, Konto oder Inhalte. Deine Kontoauszüge und Screenshots werden nicht gespeichert.
+          Dein API Key wird ausschließlich lokal auf deinem Gerät gespeichert. Für die Analyse geht er zusammen mit deinen hochgeladenen Inhalten über den Kündigo-Proxy an Anthropic in den USA. Kündigo speichert diese Inhalte nicht, Anthropic bewahrt sie kurzzeitig zur Missbrauchsprüfung auf. Für das Freikontingent zählt Kündigo nur eine anonyme Geräte-Kennung und die Anzahl deiner Analysen pro Monat, ohne Namen, Konto oder Inhalte.
         </Text>
+        <TouchableOpacity onPress={() => router.push('/datenschutz')} activeOpacity={0.7}>
+          <Text style={styles.privacyLink}>Alle Details in der Datenschutzerklärung →</Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -281,6 +354,34 @@ const styles = StyleSheet.create({
   costIcon: { fontSize: 14 },
   costText: { flex: 1, fontSize: 12, color: colors.textSecondary, lineHeight: 18 },
 
+  // Einwilligung
+  consentStatus: {
+    backgroundColor: colors.surface2, borderRadius: 12, padding: 14,
+    borderWidth: 1, borderColor: colors.border,
+  },
+  consentStatusActive: {
+    backgroundColor: `${colors.accent}12`, borderColor: `${colors.accent}35`,
+  },
+  consentStatusText: {
+    fontSize: 14, fontWeight: '700', color: colors.textPrimary, marginBottom: 4,
+  },
+  consentStatusSub: { fontSize: 12, color: colors.textSecondary, lineHeight: 18 },
+  revokeBtn: {
+    alignItems: 'center', paddingVertical: 12,
+    borderRadius: 12, borderWidth: 1, borderColor: `${colors.danger}40`,
+    backgroundColor: `${colors.danger}12`,
+  },
+  revokeBtnText: { fontSize: 14, fontWeight: '700', color: colors.danger },
+
+  // Rechtliches
+  legalRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: colors.surface2, borderRadius: 12,
+    paddingVertical: 14, paddingHorizontal: 14,
+  },
+  legalRowText: { fontSize: 14, color: colors.textPrimary, fontWeight: '600' },
+  legalRowArrow: { fontSize: 15, color: colors.accent },
+
   // Privacy
   privacyBox: {
     backgroundColor: colors.surface, borderRadius: 14, padding: 16,
@@ -288,4 +389,8 @@ const styles = StyleSheet.create({
   },
   privacyTitle: { fontSize: 13, fontWeight: '700', color: colors.textSecondary },
   privacyText: { fontSize: 12, color: colors.textTertiary, lineHeight: 19 },
+  privacyLink: {
+    fontSize: 12, color: colors.accent, lineHeight: 19,
+    marginTop: 6, textDecorationLine: 'underline',
+  },
 });

@@ -8,6 +8,10 @@ import { colors, categories } from '../constants/theme';
 import { autofillSubscription, POPULAR_SERVICES, Subscription } from '../utils/analyzeSubscriptions';
 import { getApiKey } from '../utils/storage';
 import { fetchQuota, getCachedQuota, quotaAvailable, type Quota } from '../utils/quota';
+import {
+  loadConsent, getConsent, isConsentLoaded, isConsentValid, grantConsent,
+} from '../utils/consent';
+import { ConsentModal } from '../components/ConsentModal';
 import { mergeResults } from '../utils/resultStore';
 
 const FREQUENCIES: { id: Subscription['frequency']; label: string }[] = [
@@ -25,8 +29,11 @@ export default function ManualScreen() {
   const [apiKey, setApiKeyState] = useState('');
   const [quota, setQuota] = useState<Quota | null>(getCachedQuota());
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [consentVisible, setConsentVisible] = useState(false);
+  const [pendingService, setPendingService] = useState<string | null>(null);
   useEffect(() => {
     setApiKeyState(getApiKey());
+    loadConsent();
     fetchQuota().then(q => { if (q) setQuota(q); });
   }, []);
 
@@ -46,8 +53,27 @@ export default function ManualScreen() {
     s.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  /** Auch das automatische Ergänzen überträgt Daten, also gilt dieselbe Sperre. */
   async function handleAutofill(serviceName: string) {
     setName(serviceName);
+    const consent = isConsentLoaded() ? getConsent() : await loadConsent();
+    if (!isConsentValid(consent)) {
+      setPendingService(serviceName);
+      setConsentVisible(true);
+      return;
+    }
+    await runAutofill(serviceName);
+  }
+
+  async function acceptConsent() {
+    await grantConsent();
+    setConsentVisible(false);
+    const service = pendingService;
+    setPendingService(null);
+    if (service) await runAutofill(service);
+  }
+
+  async function runAutofill(serviceName: string) {
     setAutofilling(true);
     setErrorMsg(null);
     const key = getApiKey();
@@ -109,6 +135,7 @@ export default function ManualScreen() {
   }
 
   return (
+    <>
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
       <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
         <Text style={styles.backText}>← Zurück</Text>
@@ -287,6 +314,20 @@ export default function ManualScreen() {
         </View>
       )}
     </ScrollView>
+
+    <ConsentModal
+      visible={consentVisible}
+      onAccept={acceptConsent}
+      onCancel={() => { setConsentVisible(false); setPendingService(null); }}
+      onOpenPrivacy={() => {
+        // Erst schließen, dann navigieren: das Modal hängt in einem Portal
+        // und bliebe sonst über der Datenschutzerklärung liegen.
+        setConsentVisible(false);
+        setPendingService(null);
+        setTimeout(() => router.push('/datenschutz'), 0);
+      }}
+    />
+    </>
   );
 }
 

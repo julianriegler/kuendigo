@@ -13,6 +13,10 @@ import {
 import { getApiKey } from '../utils/storage';
 import { mergeResults } from '../utils/resultStore';
 import { fetchQuota, getCachedQuota, quotaAvailable, type Quota } from '../utils/quota';
+import {
+  loadConsent, getConsent, isConsentLoaded, isConsentValid, grantConsent,
+} from '../utils/consent';
+import { ConsentModal } from '../components/ConsentModal';
 
 /** Anzeige, solange der Serverstand noch nicht abgefragt wurde. */
 const FREE_ANALYSES_HINT = 3;
@@ -199,9 +203,11 @@ export default function UploadScreen() {
   const [apiKey, setApiKeyState] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [quota, setQuota] = useState<Quota | null>(getCachedQuota());
+  const [consentVisible, setConsentVisible] = useState(false);
 
   useEffect(() => {
     setApiKeyState(getApiKey());
+    loadConsent();
     fetchQuota().then(q => { if (q) setQuota(q); });
   }, []);
 
@@ -319,7 +325,29 @@ export default function UploadScreen() {
     }
   }
 
+  /**
+   * Startet die Analyse erst, wenn die Einwilligung vorliegt. Fehlt sie,
+   * öffnet sich die Abfrage und es wird nichts übertragen.
+   */
   async function analyze() {
+    const source = SOURCES.find(s => s.id === activeId);
+    if (!source) return;
+
+    const consent = isConsentLoaded() ? getConsent() : await loadConsent();
+    if (!isConsentValid(consent)) {
+      setConsentVisible(true);
+      return;
+    }
+    await runAnalysis();
+  }
+
+  async function acceptConsent() {
+    await grantConsent();
+    setConsentVisible(false);
+    await runAnalysis();
+  }
+
+  async function runAnalysis() {
     const source = SOURCES.find(s => s.id === activeId);
     if (!source) return;
 
@@ -362,6 +390,7 @@ export default function UploadScreen() {
     (activeSource?.type === 'text' && emailText.trim().length > 20);
 
   return (
+    <>
     <ScrollView
       style={styles.scroll}
       contentContainerStyle={styles.container}
@@ -573,14 +602,34 @@ export default function UploadScreen() {
         );
       })}
 
-      {/* Privacy note */}
+      {/* Datenschutzhinweis vor der Übermittlung */}
       <View style={styles.privacyRow}>
         <Text style={styles.privacyIcon}>🔒</Text>
-        <Text style={styles.privacyText}>
-          Deine Daten werden nur für die Analyse verwendet und nicht gespeichert.
-        </Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.privacyText}>
+            Für die Analyse gehen deine hochgeladenen Inhalte an Anthropic in den USA. Kündigo
+            speichert sie nicht, die erkannten Abos bleiben auf deinem Gerät. Vor der ersten
+            Analyse fragen wir dich einmal um deine Zustimmung.
+          </Text>
+          <TouchableOpacity onPress={() => router.push('/datenschutz')} activeOpacity={0.7}>
+            <Text style={styles.privacyLink}>Details in der Datenschutzerklärung →</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </ScrollView>
+
+    <ConsentModal
+      visible={consentVisible}
+      onAccept={acceptConsent}
+      onCancel={() => setConsentVisible(false)}
+      onOpenPrivacy={() => {
+        // Erst schließen, dann navigieren: das Modal hängt in einem Portal
+        // und bliebe sonst über der Datenschutzerklärung liegen.
+        setConsentVisible(false);
+        setTimeout(() => router.push('/datenschutz'), 0);
+      }}
+    />
+    </>
   );
 }
 
@@ -740,5 +789,9 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   privacyIcon: { fontSize: 13 },
-  privacyText: { flex: 1, fontSize: 12, color: colors.textTertiary, lineHeight: 18 },
+  privacyText: { fontSize: 12, color: colors.textTertiary, lineHeight: 18 },
+  privacyLink: {
+    fontSize: 12, color: colors.accent, lineHeight: 18,
+    marginTop: 4, textDecorationLine: 'underline',
+  },
 });

@@ -88,6 +88,39 @@ API des Stores in `utils/resultStore.ts`, alle Funktionen sind asynchron:
 `clearResults`, `hasStoredResults`. Dazu synchron: `normalizeList` (bereinigt ohne zu
 speichern) und `lastPersistFailed` (Speicher blockiert, etwa Safari Privatmodus).
 
+## Einwilligung vor der Übertragung
+
+Vor der ersten Analyse fragt die App einmal um Zustimmung (`components/ConsentModal.tsx`):
+Der Inhalt geht an Anthropic in die USA, Kündigo speichert ihn nicht, die Zustimmung ist
+freiwillig und widerrufbar. Ohne Häkchen bleibt „Zustimmen" gesperrt, „Abbrechen" verhindert
+jede Übertragung. Dieselbe Sperre gilt für das automatische Ergänzen im Manuell-Screen,
+weil auch dort Daten übertragen werden.
+
+Gespeichert wird unter `kuendigo_consent_v1` der Zeitpunkt, die Textversion und der Wortlaut,
+dem zugestimmt wurde (`utils/consent.ts`, Nachweispflicht nach Art. 7 Abs. 1 DSGVO). Wird
+`CONSENT_VERSION` erhöht, weil sich der Text inhaltlich ändert, fragt die App erneut.
+
+Die Einstellungen zeigen den Status mit Datum und Uhrzeit und bieten „Einwilligung widerrufen".
+Nach dem Widerruf erscheint die Abfrage vor der nächsten Analyse wieder.
+
+## Impressum und Datenschutz
+
+`app/impressum.tsx` (§ 5 ECG, § 24 und § 25 Mediengesetz) und `app/datenschutz.tsx` (DSGVO)
+liegen als eigene Routen `/impressum` und `/datenschutz`, verlinkt aus den Einstellungen und
+aus dem Fuß des Startscreens. Gemeinsames Layout in `components/LegalPage.tsx`.
+
+**Vor dem Livegang auszufüllen** (alles in eckigen Klammern ist Platzhalter):
+
+- Impressum: Name, Anschrift, E-Mail, Unternehmensgegenstand, UID, Firmenbuch, Gewerbebehörde,
+  Kammerzugehörigkeit, Blattlinie
+- Datenschutz: Verantwortlicher, Kontaktadresse, Upstash-Region sowie die je Anbieter tatsächlich
+  gewählte Grundlage für den USA-Transfer (Standardvertragsklauseln oder Data Privacy Framework)
+- Auftragsverarbeitungsverträge mit Anthropic, Vercel und Upstash abschließen
+
+Die Datenschutzerklärung beschreibt den tatsächlichen Datenfluss der App: lokale Abo-Liste,
+Übermittlung der Hochladungen über `/api/analyze` an Anthropic in den USA, Zähler für das
+Freikontingent, Server-Protokolle, Rechtsgrundlagen, Speicherdauer und Betroffenenrechte.
+
 ## Prüfen
 
 ```bash

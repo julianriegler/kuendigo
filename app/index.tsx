@@ -1,5 +1,7 @@
 import { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import {
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions,
+} from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { colors } from '../constants/theme';
 import { getApiKey } from '../utils/storage';
@@ -7,14 +9,14 @@ import { monthlyAmount } from '../utils/analyzeSubscriptions';
 import { loadResults } from '../utils/resultStore';
 import { fetchQuota, getCachedQuota, quotaAvailable, type Quota } from '../utils/quota';
 
-const { width } = Dimensions.get('window');
-
 function formatEur(amount: number) {
   return `€${amount.toFixed(2).replace('.', ',')}`;
 }
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const narrow = width < 380;
   const hasKey = !!getApiKey();
   const [savedCount, setSavedCount] = useState(0);
   const [savedMonthly, setSavedMonthly] = useState(0);
@@ -37,7 +39,11 @@ export default function WelcomeScreen() {
   );
 
   return (
-    <View style={styles.container}>
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={[styles.container, { paddingHorizontal: narrow ? 20 : 32 }]}
+      showsVerticalScrollIndicator={false}
+    >
       {/* Settings button */}
       <TouchableOpacity style={styles.settingsBtn} onPress={() => router.push('/settings')}>
         <Text style={styles.settingsIcon}>⚙️</Text>
@@ -94,22 +100,29 @@ export default function WelcomeScreen() {
         </TouchableOpacity>
       )}
 
-      {/* Stats row */}
-      <View style={styles.statsRow}>
-        <View style={styles.statItem}>
-          <Text style={styles.statNumber}>Ø €158</Text>
-          <Text style={styles.statLabel}>pro Monat</Text>
+      {/* Erfahrungswerte, ausdrücklich als Schätzung gekennzeichnet */}
+      <View style={styles.statsCard}>
+        <Text style={styles.statsHeading}>Schätzwerte</Text>
+        <View style={styles.statsRow}>
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>ca. €158</Text>
+            <Text style={styles.statLabel}>pro Monat</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>8 bis 12</Text>
+            <Text style={styles.statLabel}>vergessene Abos</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>ca. 2 min</Text>
+            <Text style={styles.statLabel}>bis zum Ergebnis</Text>
+          </View>
         </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statItem}>
-          <Text style={styles.statNumber}>8–12</Text>
-          <Text style={styles.statLabel}>vergessene Abos</Text>
-        </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statItem}>
-          <Text style={styles.statNumber}>2 min</Text>
-          <Text style={styles.statLabel}>bis zum Ergebnis</Text>
-        </View>
+        <Text style={styles.statsSource}>
+          Grobe Durchschnittsschätzung aus Erfahrungswerten, keine eigene Erhebung. Deine echten
+          Zahlen siehst du nach der Analyse.
+        </Text>
       </View>
 
       {/* CTA */}
@@ -121,21 +134,44 @@ export default function WelcomeScreen() {
         <Text style={styles.ctaText}>Jetzt analysieren →</Text>
       </TouchableOpacity>
 
-      {/* Privacy note */}
+      {/* Datenschutzhinweis: die Analyse überträgt Inhalte, das muss hier stehen */}
       <Text style={styles.privacyNote}>
-        🔒 Deine Daten werden nur auf deinem Gerät verarbeitet
+        🔒 Deine Abo-Liste bleibt lokal auf deinem Gerät. Inhalte für die Analyse werden
+        verschlüsselt an unseren KI-Dienstleister Anthropic (USA) gesendet und von uns nicht
+        gespeichert.{' '}
+        <Text
+          style={styles.privacyNoteLink}
+          onPress={() => router.push('/datenschutz')}
+          accessibilityRole="link"
+        >
+          Zur Datenschutzerklärung
+        </Text>
       </Text>
-    </View>
+
+      {/* Rechtliches */}
+      <View style={styles.footerLinks}>
+        <TouchableOpacity onPress={() => router.push('/impressum')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Text style={styles.footerLink}>Impressum</Text>
+        </TouchableOpacity>
+        <Text style={styles.footerSeparator}>·</Text>
+        <TouchableOpacity onPress={() => router.push('/datenschutz')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Text style={styles.footerLink}>Datenschutz</Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  scroll: { flex: 1, backgroundColor: colors.bg },
+  // flexGrow statt flex, damit der Inhalt auf großen Bildschirmen mittig steht
+  // und auf schmalen scrollbar bleibt, statt abgeschnitten zu werden.
   container: {
-    flex: 1,
+    flexGrow: 1,
     backgroundColor: colors.bg,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 32,
+    paddingVertical: 96,
     overflow: 'hidden',
   },
 
@@ -248,18 +284,36 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
 
-  // Stats
+  // Schätzwerte
+  statsCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    width: '100%',
+    marginBottom: 28,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  statsHeading: {
+    fontSize: 10,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: colors.textTertiary,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  statsSource: {
+    fontSize: 10,
+    color: colors.textTertiary,
+    textAlign: 'center',
+    lineHeight: 14,
+    marginTop: 12,
+  },
   statsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 8,
-    width: '100%',
-    marginBottom: 36,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   statItem: {
     flex: 1,
@@ -299,11 +353,33 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
 
-  // Privacy
+  // Datenschutzhinweis
   privacyNote: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.textTertiary,
     textAlign: 'center',
+    lineHeight: 16,
+  },
+  privacyNoteLink: {
+    color: colors.accent,
+    textDecorationLine: 'underline',
+  },
+
+  // Rechtliches im Fuß
+  footerLinks: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+  },
+  footerLink: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    textDecorationLine: 'underline',
+  },
+  footerSeparator: {
+    fontSize: 12,
+    color: colors.textTertiary,
   },
 
   // Settings

@@ -95,5 +95,42 @@ const s6 = await fresh();
 check('geleerte Liste bleibt leer', (await s6.loadResults()).length === 0);
 check('hasStoredResults erkennt geleerte Liste', (await s6.hasStoredResults()) === true);
 
+// ─── Einwilligung ────────────────────────────────────────────────────────────
+
+async function freshConsent() {
+  round++;
+  return await import(`./consent.gen.ts?r=${round}`);
+}
+
+const c1 = await freshConsent();
+check('ohne Einwilligung ist nichts gespeichert', (await c1.loadConsent()) === null);
+check('ohne Einwilligung ist sie nicht gültig', c1.isConsentValid(null) === false);
+
+const granted = await c1.grantConsent(new Date('2026-08-17T10:30:00.000Z'));
+check('Zeitpunkt wird gespeichert', granted.grantedAt === '2026-08-17T10:30:00.000Z', granted.grantedAt);
+check('Textversion wird gespeichert', granted.version === c1.CONSENT_VERSION, granted.version);
+check('Wortlaut wird mitgespeichert',
+  granted.text.includes('Anthropic') && granted.text.includes('widerrufbar'), granted.text.slice(0, 40));
+
+const c2 = await freshConsent();
+const reloaded = await c2.loadConsent();
+check('Einwilligung überlebt das Neuladen',
+  reloaded?.grantedAt === '2026-08-17T10:30:00.000Z' && c2.isConsentValid(reloaded), reloaded);
+
+// Eine neue Textversion muss neu abgefragt werden
+check('alte Textversion gilt nicht mehr',
+  c2.isConsentValid({ grantedAt: '2026-01-01T00:00:00.000Z', version: 'alt', text: '' }) === false);
+
+const c3 = await freshConsent();
+await c3.loadConsent();
+await c3.revokeConsent();
+check('Widerruf leert den Cache sofort', c3.getConsent() === null);
+const afterRevoke = await (await freshConsent()).loadConsent();
+check('Widerruf überlebt das Neuladen', afterRevoke === null, afterRevoke);
+
+const c4 = await freshConsent();
+await c4.grantConsent();
+check('nach erneuter Zustimmung gilt sie wieder', c4.isConsentValid(await c4.loadConsent()));
+
 console.log(failed === 0 ? '\nAlle Prüfungen bestanden.' : `\n${failed} Prüfung(en) fehlgeschlagen.`);
 process.exit(failed === 0 ? 0 : 1);
