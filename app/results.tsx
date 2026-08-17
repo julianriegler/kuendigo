@@ -1,36 +1,60 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Share, Linking, Platform, Modal
+  Share, Linking, Platform, Modal, ActivityIndicator, Alert
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { colors, categories } from '../constants/theme';
 import type { Subscription } from '../utils/analyzeSubscriptions';
-import { getCancellationUrl, daysUntilCharge, DEMO_SUBSCRIPTIONS } from '../utils/analyzeSubscriptions';
-import { getCancellationGuide } from '../utils/cancellationSteps';
-import { getResults } from '../utils/resultStore';
+import {
+  getCancellationUrl, daysUntilCharge, monthlyAmount, DEMO_SUBSCRIPTIONS,
+} from '../utils/analyzeSubscriptions';
+import { getCancellationGuide, cancelDeadline, type CancelDeadline } from '../utils/cancellationSteps';
+import { cancelledSavings } from '../utils/subscriptionMath';
+import {
+  loadResults, setResults, upsertSubscription, removeSubscription,
+  normalizeList, lastPersistFailed, hasStoredResults,
+} from '../utils/resultStore';
 
 function formatEur(amount: number) {
   return `€${amount.toFixed(2).replace('.', ',')}`;
 }
 
+/**
+ * YYYY-MM-DD als TT.MM.JJJJ. Wird bewusst aus den Zahlen gebaut: new Date(iso)
+ * liest UTC-Mitternacht und würde westlich von UTC einen Tag zu früh anzeigen.
+ */
 function formatDate(iso: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? '');
+  if (match) return `${match[3]}.${match[2]}.${match[1]}`;
   const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso ?? '';
   return `${d.getDate().toString().padStart(2, '0')}.${(d.getMonth() + 1).toString().padStart(2, '0')}.${d.getFullYear()}`;
+}
+
+/**
+ * Text zur Kündigungsfrist. Ohne bekannte Frist bleibt es bewusst neutral,
+ * statt ein Datum zu erfinden.
+ */
+function deadlineLabel(info: CancelDeadline): { text: string; urgent: boolean } {
+  if (!info.date || info.daysLeft === null) {
+    return { text: 'Frist unbekannt, am besten gleich kündigen', urgent: false };
+  }
+  if (info.daysLeft < 0) {
+    return { text: `Frist war am ${formatDate(info.date)}, gilt jetzt für die nächste Periode`, urgent: false };
+  }
+  if (info.daysLeft === 0) {
+    return { text: `Heute ist der letzte Tag zum Kündigen (${formatDate(info.date)})`, urgent: true };
+  }
+  return {
+    text: `Kündigen bis ${formatDate(info.date)} (noch ${info.daysLeft} Tag${info.daysLeft === 1 ? '' : 'e'})`,
+    urgent: info.daysLeft <= 7,
+  };
 }
 
 function freqLabel(f: Subscription['frequency']) {
   return f === 'monthly' ? 'monatlich' : f === 'annual' ? 'jährlich'
     : f === 'quarterly' ? 'quartalsweise' : 'wöchentlich';
-}
-
-function monthlyAmount(s: Subscription): number {
-  switch (s.frequency) {
-    case 'weekly':    return s.amount * 4.33;
-    case 'quarterly': return s.amount / 3;
-    case 'annual':    return s.amount / 12;
-    default:          return s.amount;
-  }
 }
 
 function urgencyInfo(days: number): { label: string; color: string; icon: string } | null {
@@ -56,10 +80,12 @@ function CancellationModal({
   sub,
   onClose,
   onMarkCancelled,
+  onUndoCancelled,
 }: {
   sub: Subscription;
   onClose: () => void;
   onMarkCancelled: () => void;
+  onUndoCancelled: () => void;
 }) {
   const cat = categories[sub.category] ?? categories.other;
   const monthly = monthlyAmount(sub);
@@ -79,6 +105,8 @@ function CancellationModal({
 
   const tip = guide?.tip;
   const isAppStore = guide?.isAppStore ?? false;
+  const deadline = cancelDeadline(sub.name, sub.nextCharge);
+  const deadlineText = deadlineLabel(deadline);
 
   return (
     <Modal
@@ -110,6 +138,21 @@ function CancellationModal({
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
+            {/* Frist */}
+            <View style={[ms.deadlineBox, deadlineText.urgent && ms.deadlineBoxUrgent]}>
+              <Text style={[ms.deadlineTitle, deadlineText.urgent && { color: colors.danger }]}>
+                ⏳ {deadlineText.text}
+              </Text>
+              <Text style={ms.deadlineSub}>
+                {deadline.noticePeriodDays === undefined
+                  ? `Für ${sub.name} ist keine Kündigungsfrist hinterlegt. Nächste Abbuchung: ${formatDate(sub.nextCharge)}.`
+                  : deadline.noticePeriodDays === 0
+                    ? `Kündbar bis zur nächsten Abbuchung am ${formatDate(sub.nextCharge)}.`
+                    : `${deadline.noticePeriodDays} Tag${deadline.noticePeriodDays === 1 ? '' : 'e'} Frist vor der Abbuchung am ${formatDate(sub.nextCharge)}.`}
+                {deadline.minTermMonths ? ` Mindestlaufzeit: ${deadline.minTermMonths} Monate.` : ''}
+              </Text>
+            </View>
+
             {/* App Store hint */}
             {isAppStore && (
               <View style={ms.appStoreBanner}>
@@ -153,13 +196,15 @@ function CancellationModal({
             </Text>
 
             {/* Mark as cancelled */}
-            <TouchableOpacity
-              style={ms.doneBtn}
-              onPress={onMarkCancelled}
-              activeOpacity={0.8}
-            >
-              <Text style={ms.doneBtnText}>✓ Als gekündigt markieren</Text>
-            </TouchableOpacity>
+            {sub.cancelled ? (
+              <TouchableOpacity style={ms.undoBtn} onPress={onUndoCancelled} activeOpacity={0.8}>
+                <Text style={ms.undoBtnText}>↩︎ Doch nicht gekündigt</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={ms.doneBtn} onPress={onMarkCancelled} activeOpacity={0.8}>
+                <Text style={ms.doneBtnText}>✓ Als gekündigt markieren</Text>
+              </TouchableOpacity>
+            )}
           </ScrollView>
         </View>
       </View>
@@ -172,16 +217,19 @@ function CancellationModal({
 function SubscriptionCard({
   sub,
   onCancel,
+  onDelete,
   isCancelled,
 }: {
   sub: Subscription;
   onCancel: () => void;
+  onDelete: () => void;
   isCancelled: boolean;
 }) {
   const cat = categories[sub.category] ?? categories.other;
   const monthly = monthlyAmount(sub);
   const days = daysUntilCharge(sub.nextCharge);
   const urgency = urgencyInfo(days);
+  const deadlineText = deadlineLabel(cancelDeadline(sub.name, sub.nextCharge));
 
   return (
     <View style={[styles.card, isCancelled && styles.cardCancelled]}>
@@ -215,6 +263,15 @@ function SubscriptionCard({
         </View>
       </View>
 
+      {/* Kündigungsfrist */}
+      {!isCancelled && (
+        <View style={styles.deadlineRow}>
+          <Text style={[styles.deadlineText, deadlineText.urgent && { color: colors.danger, fontWeight: '700' }]}>
+            ⏳ {deadlineText.text}
+          </Text>
+        </View>
+      )}
+
       {/* Renewal row + cancel button */}
       <View style={styles.cardBottom}>
         <View style={styles.renewalRow}>
@@ -233,15 +290,26 @@ function SubscriptionCard({
           )}
         </View>
 
-        {isCancelled ? (
-          <TouchableOpacity style={styles.cancelledBtn} onPress={onCancel} activeOpacity={0.75}>
-            <Text style={styles.cancelledBtnText}>✓ Erledigt</Text>
+        <View style={styles.cardActions}>
+          <TouchableOpacity
+            style={styles.deleteBtn}
+            onPress={onDelete}
+            activeOpacity={0.75}
+            accessibilityLabel={`${sub.name} entfernen`}
+          >
+            <Text style={styles.deleteBtnText}>🗑 Entfernen</Text>
           </TouchableOpacity>
-        ) : (
-          <TouchableOpacity style={styles.cancelBtn} onPress={onCancel} activeOpacity={0.75}>
-            <Text style={styles.cancelBtnText}>Kündigen →</Text>
-          </TouchableOpacity>
-        )}
+
+          {isCancelled ? (
+            <TouchableOpacity style={styles.cancelledBtn} onPress={onCancel} activeOpacity={0.75}>
+              <Text style={styles.cancelledBtnText}>✓ Erledigt</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={styles.cancelBtn} onPress={onCancel} activeOpacity={0.75}>
+              <Text style={styles.cancelBtnText}>Kündigen →</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     </View>
   );
@@ -252,10 +320,44 @@ function SubscriptionCard({
 export default function ResultsScreen() {
   const router = useRouter();
   const [activeModal, setActiveModal] = useState<Subscription | null>(null);
-  const [cancelledIds, setCancelledIds] = useState<Set<string>>(new Set());
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isDemo, setIsDemo] = useState(false);
+  const [storageWarning, setStorageWarning] = useState(false);
 
-  const stored = getResults();
-  const subscriptions: Subscription[] = stored.length > 0 ? stored : DEMO_SUBSCRIPTIONS;
+  // Bei jedem Fokus neu laden, damit eine zwischenzeitliche Analyse oder ein
+  // gelöschtes Abo auch auf einer alten Instanz im Verlauf sichtbar wird.
+  useFocusEffect(
+    useCallback(() => {
+      let alive = true;
+      (async () => {
+        // everStored unterscheidet "noch nie benutzt" von "alles gelöscht",
+        // sonst kämen nach dem Löschen des letzten Abos die Demo-Daten zurück.
+        const everStored = await hasStoredResults();
+        const stored = await loadResults();
+        if (!alive) return;
+        // Ohne gespeicherte Abos wird die Demo-Liste nur angezeigt, nicht gespeichert.
+        const demo = !everStored && stored.length === 0;
+        setIsDemo(demo);
+        setSubscriptions(demo ? normalizeList(DEMO_SUBSCRIPTIONS) : stored);
+        setLoading(false);
+      })();
+      return () => { alive = false; };
+    }, [])
+  );
+
+  /** Demo-Daten werden erst gespeichert, wenn der Nutzer wirklich etwas ändert. */
+  async function ensurePersisted() {
+    if (!isDemo) return;
+    await setResults(subscriptions);
+    setIsDemo(false);
+  }
+
+  const cancelledIds = new Set(subscriptions.filter(s => s.cancelled).map(s => s.id));
+
+  // Bilanz aus allen als gekündigt markierten Abos. Die Markierung liegt im
+  // Speicher, die Summe überlebt damit jedes Neuladen.
+  const savings = cancelledSavings(subscriptions);
 
   const totalMonthly = subscriptions.reduce((sum, s) => sum + monthlyAmount(s), 0);
   const totalAnnual = totalMonthly * 12;
@@ -270,9 +372,49 @@ export default function ResultsScreen() {
     setActiveModal(sub);
   }
 
-  function markCancelled(subId: string) {
-    setCancelledIds(prev => new Set([...prev, subId]));
+  async function markCancelled(subId: string) {
     setActiveModal(null);
+    const sub = subscriptions.find(s => s.id === subId);
+    if (!sub) return;
+    await ensurePersisted();
+    const next = await upsertSubscription({
+      ...sub,
+      cancelled: true,
+      cancelledAt: sub.cancelledAt ?? new Date().toISOString().slice(0, 10),
+    });
+    setSubscriptions(next);
+    setStorageWarning(lastPersistFailed());
+  }
+
+  /** Fehlklick zurücknehmen, damit die Bilanz ehrlich bleibt. */
+  async function undoCancelled(subId: string) {
+    setActiveModal(null);
+    const sub = subscriptions.find(s => s.id === subId);
+    if (!sub) return;
+    await ensurePersisted();
+    const next = await upsertSubscription({ ...sub, cancelled: false, cancelledAt: undefined });
+    setSubscriptions(next);
+    setStorageWarning(lastPersistFailed());
+  }
+
+  async function deleteSubscription(sub: Subscription) {
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm(`„${sub.name}" wirklich aus deiner Liste entfernen?`)
+      : await new Promise<boolean>(resolve => {
+          Alert.alert(
+            'Abo entfernen',
+            `„${sub.name}" wirklich aus deiner Liste entfernen?`,
+            [
+              { text: 'Abbrechen', style: 'cancel', onPress: () => resolve(false) },
+              { text: 'Entfernen', style: 'destructive', onPress: () => resolve(true) },
+            ],
+          );
+        });
+    if (!confirmed) return;
+    await ensurePersisted();
+    const next = await removeSubscription(sub.id);
+    setSubscriptions(next);
+    setStorageWarning(lastPersistFailed());
   }
 
   async function shareResults() {
@@ -290,11 +432,20 @@ export default function ResultsScreen() {
     .sort(([, a], [, b]) => b - a)
     .slice(0, 5);
 
-  const cancelledCount = cancelledIds.size;
-  const savedMonthly = [...cancelledIds].reduce((sum, id) => {
-    const sub = subscriptions.find(s => s.id === id);
-    return sub ? sum + monthlyAmount(sub) : sum;
-  }, 0);
+  // Ältestes Kündigungsdatum für die Bilanz-Karte
+  const firstCancelledAt = subscriptions
+    .filter(s => s.cancelled && s.cancelledAt)
+    .map(s => s.cancelledAt as string)
+    .sort()[0] ?? null;
+
+  if (loading) {
+    return (
+      <View style={styles.loadingWrap}>
+        <ActivityIndicator size="large" color={colors.accent} />
+        <Text style={styles.loadingText}>Abos werden geladen …</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -309,19 +460,49 @@ export default function ResultsScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Bilanz aus allen gekündigten Abos */}
+        <View style={[styles.balanceCard, savings.count === 0 && styles.balanceCardEmpty]}>
+          <Text style={styles.balanceLabel}>Deine Ersparnis</Text>
+          {savings.count === 0 ? (
+            <Text style={styles.balanceEmptyText}>
+              Noch nichts gekündigt. Sobald du ein Abo als gekündigt markierst, zählt Kündigo hier mit.
+            </Text>
+          ) : (
+            <>
+              <Text style={styles.balanceAmount}>{formatEur(savings.perMonth)}</Text>
+              <Text style={styles.balanceSub}>pro Monat · {formatEur(savings.perYear)} pro Jahr</Text>
+              <View style={styles.balanceFooter}>
+                <Text style={styles.balanceFooterText}>
+                  ✓ {savings.count} Abo{savings.count > 1 ? 's' : ''} gekündigt
+                  {firstCancelledAt ? ` · seit ${formatDate(firstCancelledAt)}` : ''}
+                </Text>
+              </View>
+            </>
+          )}
+        </View>
+
+        {/* Hinweise */}
+        {isDemo && (
+          <View style={styles.noticeBox}>
+            <Text style={styles.noticeText}>
+              👀 Beispieldaten. Deine Liste wird gespeichert, sobald du eine echte Analyse startest oder hier etwas änderst.
+            </Text>
+          </View>
+        )}
+        {storageWarning && (
+          <View style={[styles.noticeBox, styles.noticeBoxDanger]}>
+            <Text style={[styles.noticeText, { color: colors.danger }]}>
+              ⚠️ Änderungen konnten nicht gespeichert werden. Im privaten Modus deines Browsers gehen sie beim Neuladen verloren.
+            </Text>
+          </View>
+        )}
+
         {/* Hero */}
         <View style={styles.heroCard}>
           <Text style={styles.heroLabel}>Du zahlst monatlich</Text>
           <Text style={styles.heroAmount}>{formatEur(totalMonthly)}</Text>
           <Text style={styles.heroSub}>{formatEur(totalAnnual)} pro Jahr · {subscriptions.length} Abos gefunden</Text>
-          {cancelledCount > 0 && (
-            <View style={[styles.heroAlert, { backgroundColor: `${colors.accent}15`, borderColor: `${colors.accent}30` }]}>
-              <Text style={[styles.heroAlertText, { color: colors.accent }]}>
-                ✓ {cancelledCount} Abo{cancelledCount > 1 ? 's' : ''} gekündigt · {formatEur(savedMonthly)}/Mo gespart!
-              </Text>
-            </View>
-          )}
-          {urgent.length > 0 && cancelledCount === 0 && (
+          {urgent.length > 0 && (
             <View style={styles.heroAlert}>
               <Text style={styles.heroAlertText}>
                 🚨 {urgent.length} Abo{urgent.length > 1 ? 's' : ''} verlänger{urgent.length > 1 ? 'n' : 't'} sich diese Woche
@@ -391,11 +572,18 @@ export default function ResultsScreen() {
 
         {/* All subscriptions */}
         <Text style={styles.sectionLabel}>Alle Abos</Text>
-        {sorted.map(sub => (
+        {sorted.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyText}>
+              Keine gespeicherten Abos. Starte eine neue Analyse, um deine Liste zu füllen.
+            </Text>
+          </View>
+        ) : sorted.map(sub => (
           <SubscriptionCard
             key={sub.id}
             sub={sub}
             onCancel={() => openCancelModal(sub)}
+            onDelete={() => deleteSubscription(sub)}
             isCancelled={cancelledIds.has(sub.id)}
           />
         ))}
@@ -432,6 +620,7 @@ export default function ResultsScreen() {
           sub={activeModal}
           onClose={() => setActiveModal(null)}
           onMarkCancelled={() => markCancelled(activeModal.id)}
+          onUndoCancelled={() => undoCancelled(activeModal.id)}
         />
       )}
     </View>
@@ -446,7 +635,8 @@ const ms = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.72)',
   },
   sheet: {
@@ -513,6 +703,16 @@ const ms = StyleSheet.create({
     fontSize: 13, color: '#5AA3FF',
     lineHeight: 18,
   },
+
+  deadlineBox: {
+    backgroundColor: colors.surface2, borderRadius: 12, padding: 14,
+    marginBottom: 20, borderWidth: 1, borderColor: colors.border,
+  },
+  deadlineBoxUrgent: {
+    backgroundColor: `${colors.danger}12`, borderColor: `${colors.danger}35`,
+  },
+  deadlineTitle: { fontSize: 14, fontWeight: '700', color: colors.textPrimary, marginBottom: 4 },
+  deadlineSub: { fontSize: 12, color: colors.textSecondary, lineHeight: 17 },
 
   stepsTitle: {
     fontSize: 12, letterSpacing: 1,
@@ -586,6 +786,17 @@ const ms = StyleSheet.create({
     fontSize: 16, fontWeight: '700',
     color: colors.accent,
   },
+  undoBtn: {
+    backgroundColor: colors.surface2,
+    borderRadius: 14, paddingVertical: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  undoBtnText: {
+    fontSize: 16, fontWeight: '600',
+    color: colors.textSecondary,
+  },
 });
 
 // ─── Screen Styles ────────────────────────────────────────────────────────────
@@ -599,6 +810,36 @@ const styles = StyleSheet.create({
   backText: { color: colors.textSecondary, fontSize: 15 },
   shareBtn: { backgroundColor: colors.surface2, borderRadius: 20, paddingVertical: 6, paddingHorizontal: 14 },
   shareText: { color: colors.textPrimary, fontSize: 14, fontWeight: '600' },
+
+  // Bilanz
+  balanceCard: {
+    backgroundColor: `${colors.accent}12`, borderRadius: 18, padding: 20,
+    marginBottom: 16, borderWidth: 1, borderColor: `${colors.accent}35`,
+  },
+  balanceCardEmpty: {
+    backgroundColor: colors.surface, borderColor: colors.border,
+  },
+  balanceLabel: {
+    fontSize: 12, letterSpacing: 0.8, textTransform: 'uppercase',
+    color: colors.textSecondary, fontWeight: '700', marginBottom: 6,
+  },
+  balanceAmount: {
+    fontSize: 34, fontWeight: '800', color: colors.accent,
+    letterSpacing: -1.2, marginBottom: 2,
+  },
+  balanceSub: { fontSize: 13, color: colors.textSecondary },
+  balanceFooter: {
+    marginTop: 12, paddingTop: 10,
+    borderTopWidth: 1, borderTopColor: `${colors.accent}25`,
+  },
+  balanceFooterText: { fontSize: 12, color: colors.accent, fontWeight: '600' },
+  balanceEmptyText: { fontSize: 13, color: colors.textSecondary, lineHeight: 19 },
+
+  // Frist auf der Karte
+  deadlineRow: {
+    paddingHorizontal: 16, paddingBottom: 10, marginTop: -4,
+  },
+  deadlineText: { fontSize: 12, color: colors.textSecondary },
 
   heroCard: {
     backgroundColor: colors.surface, borderRadius: 20, padding: 28,
@@ -708,6 +949,34 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: `${colors.accent}40`,
   },
   cancelledBtnText: { fontSize: 13, fontWeight: '700', color: colors.accent },
+
+  cardActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  deleteBtn: {
+    borderRadius: 10, paddingVertical: 7, paddingHorizontal: 12,
+    borderWidth: 1, borderColor: colors.border,
+  },
+  deleteBtnText: { fontSize: 13, fontWeight: '600', color: colors.textTertiary },
+
+  emptyBox: {
+    backgroundColor: colors.surface, borderRadius: 14, padding: 18,
+    marginBottom: 12, borderWidth: 1, borderColor: colors.border,
+  },
+  emptyText: { fontSize: 14, color: colors.textSecondary, lineHeight: 20 },
+
+  noticeBox: {
+    backgroundColor: colors.surface, borderRadius: 12, padding: 14,
+    marginBottom: 16, borderWidth: 1, borderColor: colors.border,
+  },
+  noticeBoxDanger: {
+    backgroundColor: `${colors.danger}12`, borderColor: `${colors.danger}35`,
+  },
+  noticeText: { fontSize: 13, color: colors.textSecondary, lineHeight: 19 },
+
+  loadingWrap: {
+    flex: 1, backgroundColor: colors.bg,
+    alignItems: 'center', justifyContent: 'center', gap: 14,
+  },
+  loadingText: { fontSize: 14, color: colors.textSecondary },
 
   tipBox: {
     backgroundColor: `${colors.accent}10`, borderRadius: 14, padding: 18,

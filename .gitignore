@@ -40,3 +40,7 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Generierte Testkopie
+scripts/store-test/resultStore.gen.ts
+scripts/store-test/kvStorage.gen.ts

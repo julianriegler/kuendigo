@@ -5,9 +5,10 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors, categories } from '../constants/theme';
-import { autofillSubscription, POPULAR_SERVICES, DEMO_SUBSCRIPTIONS, Subscription } from '../utils/analyzeSubscriptions';
+import { autofillSubscription, POPULAR_SERVICES, Subscription } from '../utils/analyzeSubscriptions';
 import { getApiKey } from '../utils/storage';
-import { setResults } from '../utils/resultStore';
+import { fetchQuota, getCachedQuota, quotaAvailable, type Quota } from '../utils/quota';
+import { mergeResults } from '../utils/resultStore';
 
 const FREQUENCIES: { id: Subscription['frequency']; label: string }[] = [
   { id: 'monthly',   label: 'Monatlich' },
@@ -22,7 +23,12 @@ export default function ManualScreen() {
   const router = useRouter();
 
   const [apiKey, setApiKeyState] = useState('');
-  useEffect(() => { setApiKeyState(getApiKey()); }, []);
+  const [quota, setQuota] = useState<Quota | null>(getCachedQuota());
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  useEffect(() => {
+    setApiKeyState(getApiKey());
+    fetchQuota().then(q => { if (q) setQuota(q); });
+  }, []);
 
   // List of manually added subscriptions
   const [subs, setSubs] = useState<Subscription[]>([]);
@@ -43,20 +49,21 @@ export default function ManualScreen() {
   async function handleAutofill(serviceName: string) {
     setName(serviceName);
     setAutofilling(true);
+    setErrorMsg(null);
     const key = getApiKey();
     setApiKeyState(key);
     try {
-      const sub = key
-        ? await autofillSubscription(serviceName, key)
-        : DEMO_SUBSCRIPTIONS.find(d => d.name.toLowerCase().includes(serviceName.toLowerCase())) ?? null;
+      // Ohne eigenen Key übernimmt der Serverschlüssel samt Freikontingent
+      const sub = await autofillSubscription(serviceName, key);
 
       if (sub) {
         setAmount(String(sub.amount));
         setFrequency(sub.frequency);
         setCategory(sub.category);
       }
-    } catch {
-      // silent — user can fill manually
+    } catch (err: any) {
+      // Auch der Autofill verbraucht Freikontingent, ein 429 darf nicht still bleiben
+      setErrorMsg(err?.message ?? 'Automatisches Ergänzen hat nicht geklappt. Trage die Werte einfach selbst ein.');
     } finally {
       setAutofilling(false);
     }
@@ -93,11 +100,11 @@ export default function ManualScreen() {
     setSubs(prev => prev.filter(s => s.id !== id));
   }
 
-  function goToResults() {
+  async function goToResults() {
     if (subs.length === 0) {
       return Alert.alert('Keine Abos', 'Füge zuerst mindestens ein Abo hinzu.');
     }
-    setResults(subs);
+    await mergeResults(subs);
     router.push('/results');
   }
 
@@ -109,6 +116,25 @@ export default function ManualScreen() {
 
       <Text style={styles.title}>Manuell eintragen</Text>
       <Text style={styles.subtitle}>Trage deine Abos direkt ein. Die KI ergänzt Preise automatisch.</Text>
+
+      {/* Freikontingent: auch das Ergänzen läuft über eine Analyse */}
+      {!apiKey && quotaAvailable() && (
+        <TouchableOpacity style={styles.quotaBanner} onPress={() => router.push('/settings')} activeOpacity={0.8}>
+          <Text style={styles.quotaBannerText}>
+            🎁 {quota
+              ? `Noch ${quota.remaining} von ${quota.limit} Gratis-Analysen diesen Monat`
+              : '3 Gratis-Analysen pro Monat'}
+            {'. '}Auch das automatische Ergänzen zählt dazu.
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      {errorMsg && (
+        <TouchableOpacity style={styles.errorBanner} onPress={() => setErrorMsg(null)} activeOpacity={0.8}>
+          <Text style={styles.errorBannerText}>{errorMsg}</Text>
+          <Text style={styles.errorBannerClose}>✕</Text>
+        </TouchableOpacity>
+      )}
 
       {/* ── Popular Services ── */}
       <Text style={styles.sectionLabel}>Beliebte Dienste</Text>
@@ -272,7 +298,21 @@ const styles = StyleSheet.create({
   backText: { color: colors.textSecondary, fontSize: 15 },
 
   title: { fontSize: 26, fontWeight: '800', color: colors.textPrimary, marginBottom: 8, letterSpacing: -0.7 },
-  subtitle: { fontSize: 14, color: colors.textSecondary, lineHeight: 20, marginBottom: 28 },
+  subtitle: { fontSize: 14, color: colors.textSecondary, lineHeight: 20, marginBottom: 16 },
+
+  quotaBanner: {
+    backgroundColor: `${colors.accent}12`, borderRadius: 12, padding: 14,
+    marginBottom: 12, borderWidth: 1, borderColor: `${colors.accent}35`,
+  },
+  quotaBannerText: { fontSize: 12, color: colors.accent, lineHeight: 17, fontWeight: '600' },
+
+  errorBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: `${colors.danger}15`, borderRadius: 12, padding: 14,
+    marginBottom: 12, borderWidth: 1, borderColor: `${colors.danger}40`,
+  },
+  errorBannerText: { flex: 1, fontSize: 12, color: colors.danger, lineHeight: 17 },
+  errorBannerClose: { fontSize: 13, color: colors.danger, fontWeight: '700' },
 
   sectionLabel: {
     fontSize: 11, letterSpacing: 1, textTransform: 'uppercase',

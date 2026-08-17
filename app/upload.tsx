@@ -9,10 +9,23 @@ import * as FileSystem from 'expo-file-system';
 import { colors } from '../constants/theme';
 import {
   analyzeStatement, analyzeScreenshot, analyzeEmails,
-  DEMO_SUBSCRIPTIONS,
 } from '../utils/analyzeSubscriptions';
 import { getApiKey } from '../utils/storage';
-import { setResults } from '../utils/resultStore';
+import { mergeResults } from '../utils/resultStore';
+import { fetchQuota, getCachedQuota, quotaAvailable, type Quota } from '../utils/quota';
+
+/** Anzeige, solange der Serverstand noch nicht abgefragt wurde. */
+const FREE_ANALYSES_HINT = 3;
+
+/** Beispiel-Kontoauszug für den Ausprobier-Link. */
+const SAMPLE_STATEMENT = [
+  '15.07.2026;NETFLIX INTL BV;-13,99',
+  '20.07.2026;SPOTIFY AB;-9,99',
+  '01.07.2026;ADOBE SYSTEMS;-54,99',
+  '10.07.2026;AMAZON PRIME;-8,99',
+  '05.07.2026;MICROSOFT XBOX GAMEPASS;-14,99',
+  '22.07.2026;BILLA PLUS EINKAUF;-63,20',
+].join('\n');
 
 // ─── Image helpers (web only) ────────────────────────────────────────────────
 
@@ -185,9 +198,11 @@ export default function UploadScreen() {
   const [loading, setLoading] = useState(false);
   const [apiKey, setApiKeyState] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [quota, setQuota] = useState<Quota | null>(getCachedQuota());
 
   useEffect(() => {
     setApiKeyState(getApiKey());
+    fetchQuota().then(q => { if (q) setQuota(q); });
   }, []);
 
   // File state (girokonto + kreditkarte)
@@ -315,23 +330,20 @@ export default function UploadScreen() {
     setErrorMsg(null);
     setLoading(true);
     try {
+      // Der Serverschlüssel übernimmt, wenn kein eigener Key hinterlegt ist,
+      // deshalb gibt es hier keinen Demo-Zweig mehr.
       let subs;
-      if (!key) {
-        // Demo mode — no real analysis
-        await new Promise(r => setTimeout(r, 1800));
-        subs = DEMO_SUBSCRIPTIONS;
-      } else if (source.type === 'file' && fileContent) {
+      if (source.type === 'file' && fileContent) {
         subs = await analyzeStatement(fileContent, key);
       } else if (source.type === 'screenshot' && screenshotB64) {
         subs = await analyzeScreenshot(screenshotB64, screenshotMime, key);
       } else if (source.type === 'text' && emailText.trim()) {
         subs = await analyzeEmails(emailText, key);
       } else {
-        // No input provided — demo
-        await new Promise(r => setTimeout(r, 1800));
-        subs = DEMO_SUBSCRIPTIONS;
+        setErrorMsg('Bitte zuerst einen Kontoauszug, einen Screenshot oder E-Mail-Text hinzufügen.');
+        return;
       }
-      setResults(subs ?? []);
+      await mergeResults(subs ?? []);
       router.push('/results');
     } catch (err: any) {
       const msg: string = err?.message ?? 'Analyse fehlgeschlagen';
@@ -370,15 +382,21 @@ export default function UploadScreen() {
         Abos verstecken sich an 5 verschiedenen Stellen. Wähle eine Quelle — oder mehrere nacheinander.
       </Text>
 
-      {/* Demo mode banner */}
-      {!apiKey && (
-        <TouchableOpacity style={styles.demoBanner} onPress={() => router.push('/settings')} activeOpacity={0.8}>
-          <Text style={styles.demoBannerIcon}>⚠️</Text>
-          <View style={styles.demoBannerText}>
-            <Text style={styles.demoBannerTitle}>Demo-Modus — kein API Key</Text>
-            <Text style={styles.demoBannerSub}>Screenshots werden NICHT analysiert. Tippe hier um deinen Key einzutragen.</Text>
+      {/* Freikontingent */}
+      {!apiKey && quotaAvailable() && (
+        <TouchableOpacity style={styles.quotaBanner} onPress={() => router.push('/settings')} activeOpacity={0.8}>
+          <Text style={styles.quotaBannerIcon}>🎁</Text>
+          <View style={styles.quotaBannerText}>
+            <Text style={styles.quotaBannerTitle}>
+              {quota
+                ? `Noch ${quota.remaining} von ${quota.limit} Gratis-Analysen diesen Monat`
+                : `${FREE_ANALYSES_HINT} Gratis-Analysen pro Monat`}
+            </Text>
+            <Text style={styles.quotaBannerSub}>
+              Danach eigenen API Key eintragen oder Pro holen. Tippe hier für die Einstellungen.
+            </Text>
           </View>
-          <Text style={styles.demoBannerArrow}>→</Text>
+          <Text style={styles.quotaBannerArrow}>→</Text>
         </TouchableOpacity>
       )}
 
@@ -479,9 +497,9 @@ export default function UploadScreen() {
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.demoLink}
-                      onPress={() => { setFileName('demo.csv'); setFileContent('DEMO'); }}
+                      onPress={() => { setFileName('beispiel-auszug.csv'); setFileContent(SAMPLE_STATEMENT); }}
                     >
-                      <Text style={styles.demoLinkText}>Demo-Daten verwenden →</Text>
+                      <Text style={styles.demoLinkText}>Beispiel-Auszug einsetzen →</Text>
                     </TouchableOpacity>
                   </>
                 )}
@@ -508,12 +526,6 @@ export default function UploadScreen() {
                         </>
                       )}
                     </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.demoLink}
-                      onPress={() => { setScreenshotB64('DEMO'); setScreenshotName('demo.jpg'); }}
-                    >
-                      <Text style={styles.demoLinkText}>Demo-Daten verwenden →</Text>
-                    </TouchableOpacity>
                   </>
                 )}
 
@@ -535,7 +547,7 @@ export default function UploadScreen() {
                       style={styles.demoLink}
                       onPress={() => setEmailText('Netflix Rechnung: €13,99 am 15.07.2026\nSpotify Premium monatlich €9,99 am 20.07.2026\nAdobe Creative Cloud €54,99 Rechnung Juli 2026\nAmazon Prime Mitgliedschaft €8,99 am 10.07.2026')}
                     >
-                      <Text style={styles.demoLinkText}>Demo-Text einfügen →</Text>
+                      <Text style={styles.demoLinkText}>Beispiel-Text einfügen →</Text>
                     </TouchableOpacity>
                   </>
                 )}
@@ -544,17 +556,15 @@ export default function UploadScreen() {
                 <TouchableOpacity
                   style={[
                     styles.analyzeBtn,
-                    !hasInput && !loading && !apiKey && styles.analyzeBtnDemo,
+                    (!hasInput || loading) && styles.analyzeBtnDemo,
                   ]}
                   onPress={analyze}
-                  disabled={loading}
+                  disabled={loading || !hasInput}
                   activeOpacity={0.85}
                 >
                   {loading
                     ? <ActivityIndicator color={colors.bg} />
-                    : <Text style={styles.analyzeBtnText}>
-                        {hasInput || !apiKey ? 'Abos analysieren →' : 'Demo starten →'}
-                      </Text>
+                    : <Text style={styles.analyzeBtnText}>Abos analysieren →</Text>
                   }
                 </TouchableOpacity>
               </View>
@@ -596,18 +606,18 @@ const styles = StyleSheet.create({
     lineHeight: 20, marginBottom: 16,
   },
 
-  // Demo banner
-  demoBanner: {
+  // Freikontingent
+  quotaBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: `${colors.warning}15`,
+    backgroundColor: `${colors.accent}12`,
     borderRadius: 12, padding: 14, marginBottom: 12,
-    borderWidth: 1, borderColor: `${colors.warning}40`,
+    borderWidth: 1, borderColor: `${colors.accent}35`,
   },
-  demoBannerIcon: { fontSize: 18 },
-  demoBannerText: { flex: 1 },
-  demoBannerTitle: { fontSize: 13, fontWeight: '700', color: colors.warning, marginBottom: 2 },
-  demoBannerSub: { fontSize: 11, color: colors.textSecondary, lineHeight: 16 },
-  demoBannerArrow: { fontSize: 16, color: colors.warning },
+  quotaBannerIcon: { fontSize: 18 },
+  quotaBannerText: { flex: 1 },
+  quotaBannerTitle: { fontSize: 13, fontWeight: '700', color: colors.accent, marginBottom: 2 },
+  quotaBannerSub: { fontSize: 11, color: colors.textSecondary, lineHeight: 16 },
+  quotaBannerArrow: { fontSize: 16, color: colors.accent },
 
   // Coverage bar
   coverageBar: {

@@ -9,10 +9,19 @@ export interface CancellationGuide {
   isAppStore?: boolean;   // Can be cancelled directly via iOS Settings
   isPlayStore?: boolean;  // Can be cancelled directly via Google Play
   tip?: string;
+  /**
+   * Kündigungsfrist in Tagen vor der nächsten Abbuchung.
+   * 0 bedeutet: bis zum Abbuchungstag kündbar. Fehlt das Feld,
+   * ist die Frist unbekannt und die App zeigt einen neutralen Hinweis.
+   */
+  noticePeriodDays?: number;
+  /** Mindestlaufzeit in Monaten, falls der Dienst eine hat. */
+  minTermMonths?: number;
 }
 
 const GUIDES: Record<string, CancellationGuide> = {
   netflix: {
+    noticePeriodDays: 0,
     url: 'https://www.netflix.com/cancel',
     steps: [
       'Auf netflix.com anmelden',
@@ -24,6 +33,7 @@ const GUIDES: Record<string, CancellationGuide> = {
     tip: 'Du kannst Netflix bis zum letzten bezahlten Tag nutzen.',
   },
   spotify: {
+    noticePeriodDays: 0,
     url: 'https://www.spotify.com/de/account/subscription/cancel',
     steps: [
       'Auf spotify.com/account anmelden',
@@ -34,6 +44,7 @@ const GUIDES: Record<string, CancellationGuide> = {
     tip: 'Premium bleibt bis Ende des Abrechnungszeitraums aktiv.',
   },
   'amazon prime': {
+    noticePeriodDays: 0,
     url: 'https://www.amazon.de/mc/pipelines/cancellation',
     steps: [
       'Auf amazon.de anmelden',
@@ -44,6 +55,7 @@ const GUIDES: Record<string, CancellationGuide> = {
     tip: 'Bei jährlichem Abo gibt es eine anteilige Rückerstattung.',
   },
   'disney+': {
+    noticePeriodDays: 0,
     url: 'https://www.disneyplus.com/account/subscription',
     steps: [
       'Auf disneyplus.com anmelden',
@@ -53,6 +65,7 @@ const GUIDES: Record<string, CancellationGuide> = {
     ],
   },
   'apple tv+': {
+    noticePeriodDays: 1,
     url: 'https://appleid.apple.com/account/manage',
     isAppStore: true,
     steps: [
@@ -64,6 +77,7 @@ const GUIDES: Record<string, CancellationGuide> = {
     ],
   },
   'youtube premium': {
+    noticePeriodDays: 0,
     url: 'https://www.youtube.com/paid_memberships',
     steps: [
       'YouTube.com öffnen und anmelden',
@@ -73,6 +87,7 @@ const GUIDES: Record<string, CancellationGuide> = {
     ],
   },
   'apple icloud': {
+    noticePeriodDays: 1,
     url: 'https://appleid.apple.com/account/manage',
     isAppStore: true,
     steps: [
@@ -84,6 +99,7 @@ const GUIDES: Record<string, CancellationGuide> = {
     tip: 'Daten bleiben erhalten, du wirst auf 5 GB Gratis zurückgestuft.',
   },
   'apple one': {
+    noticePeriodDays: 1,
     url: 'https://appleid.apple.com/account/manage',
     isAppStore: true,
     steps: [
@@ -94,6 +110,7 @@ const GUIDES: Record<string, CancellationGuide> = {
     ],
   },
   'apple music': {
+    noticePeriodDays: 1,
     url: 'https://music.apple.com/account',
     isAppStore: true,
     steps: [
@@ -104,6 +121,7 @@ const GUIDES: Record<string, CancellationGuide> = {
     ],
   },
   'google one': {
+    noticePeriodDays: 0,
     url: 'https://one.google.com/storage/dashboard',
     steps: [
       'one.google.com öffnen und anmelden',
@@ -113,6 +131,7 @@ const GUIDES: Record<string, CancellationGuide> = {
     ],
   },
   dropbox: {
+    noticePeriodDays: 0,
     url: 'https://www.dropbox.com/account/plan',
     steps: [
       'dropbox.com anmelden',
@@ -123,6 +142,7 @@ const GUIDES: Record<string, CancellationGuide> = {
     tip: 'Downgrade auf Gratisplan = Kündigung des bezahlten Plans.',
   },
   adobe: {
+    minTermMonths: 12,
     url: 'https://account.adobe.com/plans',
     steps: [
       'account.adobe.com öffnen und anmelden',
@@ -133,6 +153,7 @@ const GUIDES: Record<string, CancellationGuide> = {
     tip: '⚠️ Adobe berechnet bei Jahreszahlung oft eine Gebühr. Erst nach 12 Monaten ist die Kündigung kostenlos.',
   },
   'microsoft 365': {
+    noticePeriodDays: 0,
     url: 'https://account.microsoft.com/services',
     steps: [
       'account.microsoft.com öffnen und anmelden',
@@ -142,6 +163,7 @@ const GUIDES: Record<string, CancellationGuide> = {
     ],
   },
   'office 365': {
+    noticePeriodDays: 0,
     url: 'https://account.microsoft.com/services',
     steps: [
       'account.microsoft.com öffnen und anmelden',
@@ -151,6 +173,7 @@ const GUIDES: Record<string, CancellationGuide> = {
     ],
   },
   linkedin: {
+    noticePeriodDays: 0,
     url: 'https://www.linkedin.com/premium/manage-subscription',
     steps: [
       'LinkedIn.com öffnen und anmelden',
@@ -161,6 +184,7 @@ const GUIDES: Record<string, CancellationGuide> = {
     tip: 'Premium-Features bleiben bis Ende des Abrechnungsmonats aktiv.',
   },
   chatgpt: {
+    noticePeriodDays: 0,
     url: 'https://chat.openai.com/#settings/Subscription',
     steps: [
       'chat.openai.com öffnen und anmelden',
@@ -170,6 +194,7 @@ const GUIDES: Record<string, CancellationGuide> = {
     ],
   },
   'xbox game pass': {
+    noticePeriodDays: 0,
     url: 'https://account.microsoft.com/services',
     steps: [
       'account.microsoft.com öffnen und anmelden',
@@ -179,6 +204,7 @@ const GUIDES: Record<string, CancellationGuide> = {
     ],
   },
   'playstation plus': {
+    noticePeriodDays: 0,
     url: 'https://www.playstation.com/de-at/my-playstation/account-management/',
     steps: [
       'playstation.com anmelden',
@@ -189,6 +215,7 @@ const GUIDES: Record<string, CancellationGuide> = {
     tip: 'PlayStation Plus läuft bis Ende des bezahlten Zeitraums weiter.',
   },
   headspace: {
+    noticePeriodDays: 1,
     url: 'https://www.headspace.com/account',
     isAppStore: true,
     steps: [
@@ -199,6 +226,7 @@ const GUIDES: Record<string, CancellationGuide> = {
     ],
   },
   calm: {
+    noticePeriodDays: 1,
     url: 'https://account.calm.com/settings',
     isAppStore: true,
     steps: [
@@ -209,6 +237,8 @@ const GUIDES: Record<string, CancellationGuide> = {
     ],
   },
   freeletics: {
+    noticePeriodDays: 14,
+    minTermMonths: 12,
     url: 'https://www.freeletics.com/de/account/',
     isAppStore: true,
     steps: [
@@ -219,6 +249,8 @@ const GUIDES: Record<string, CancellationGuide> = {
     ],
   },
   dazn: {
+    noticePeriodDays: 30,
+    minTermMonths: 12,
     url: 'https://www.dazn.com/de-AT/account/subscription',
     steps: [
       'DAZN.com öffnen und anmelden',
@@ -228,6 +260,7 @@ const GUIDES: Record<string, CancellationGuide> = {
     ],
   },
   audible: {
+    noticePeriodDays: 0,
     url: 'https://www.audible.de/account/cancelMembership',
     steps: [
       'audible.de öffnen und anmelden',
@@ -237,6 +270,7 @@ const GUIDES: Record<string, CancellationGuide> = {
     ],
   },
   duolingo: {
+    noticePeriodDays: 1,
     url: 'https://www.duolingo.com/settings/subscription',
     isAppStore: true,
     steps: [
@@ -247,6 +281,7 @@ const GUIDES: Record<string, CancellationGuide> = {
     ],
   },
   tidal: {
+    noticePeriodDays: 0,
     url: 'https://account.tidal.com/subscription',
     steps: [
       'listen.tidal.com öffnen und anmelden',
@@ -256,6 +291,7 @@ const GUIDES: Record<string, CancellationGuide> = {
     ],
   },
   notion: {
+    noticePeriodDays: 0,
     url: 'https://www.notion.so/profile/billing',
     steps: [
       'notion.so öffnen und anmelden',
@@ -265,6 +301,7 @@ const GUIDES: Record<string, CancellationGuide> = {
     ],
   },
   canva: {
+    noticePeriodDays: 0,
     url: 'https://www.canva.com/settings/billing',
     steps: [
       'canva.com öffnen und anmelden',
@@ -274,6 +311,7 @@ const GUIDES: Record<string, CancellationGuide> = {
     ],
   },
   nordvpn: {
+    noticePeriodDays: 0,
     url: 'https://my.nordaccount.com/dashboard/nordvpn/',
     steps: [
       'my.nordaccount.com öffnen und anmelden',
@@ -283,6 +321,7 @@ const GUIDES: Record<string, CancellationGuide> = {
     ],
   },
   '1password': {
+    noticePeriodDays: 0,
     url: 'https://my.1password.com/billing',
     steps: [
       'my.1password.com öffnen und anmelden',
@@ -292,6 +331,70 @@ const GUIDES: Record<string, CancellationGuide> = {
     ],
   },
 };
+
+// ─── Fristen ─────────────────────────────────────────────────────────────────
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/** Parst YYYY-MM-DD als UTC-Mitternacht. Null bei ungültiger Eingabe. */
+function parseIsoDate(iso: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? '');
+  if (!match) return null;
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function toIsoDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+/**
+ * Letztmöglicher Kündigungstag: nächste Abbuchung minus Kündigungsfrist.
+ * Bei einer Frist von 0 Tagen ist das der Abbuchungstag selbst.
+ * Gibt null zurück, wenn die Frist unbekannt oder das Datum ungültig ist.
+ */
+export function latestCancelDate(nextCharge: string, noticePeriodDays?: number): string | null {
+  if (noticePeriodDays === undefined || !Number.isFinite(noticePeriodDays) || noticePeriodDays < 0) {
+    return null;
+  }
+  const charge = parseIsoDate(nextCharge);
+  if (!charge) return null;
+  return toIsoDate(new Date(charge.getTime() - noticePeriodDays * MS_PER_DAY));
+}
+
+export interface CancelDeadline {
+  /** Letztmöglicher Kündigungstag als YYYY-MM-DD, null wenn Frist unbekannt. */
+  date: string | null;
+  /** Bekannte Kündigungsfrist in Tagen, undefined wenn unbekannt. */
+  noticePeriodDays?: number;
+  /** Mindestlaufzeit in Monaten, falls der Dienst eine hat. */
+  minTermMonths?: number;
+  /** Tage bis zum letztmöglichen Kündigungstag, negativ wenn vorbei. */
+  daysLeft: number | null;
+}
+
+/**
+ * Fristinfo für ein Abo. Kennt die App den Dienst nicht oder fehlt die Frist,
+ * bleiben date und daysLeft null und die Oberfläche zeigt einen neutralen Hinweis.
+ */
+export function cancelDeadline(name: string, nextCharge: string, today: Date = new Date()): CancelDeadline {
+  const guide = getCancellationGuide(name);
+  const date = latestCancelDate(nextCharge, guide?.noticePeriodDays);
+
+  let daysLeft: number | null = null;
+  const deadline = date ? parseIsoDate(date) : null;
+  if (deadline) {
+    const todayUtc = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+    daysLeft = Math.round((deadline.getTime() - todayUtc) / MS_PER_DAY);
+  }
+
+  return {
+    date,
+    noticePeriodDays: guide?.noticePeriodDays,
+    minTermMonths: guide?.minTermMonths,
+    daysLeft,
+  };
+}
 
 /** Returns the cancellation guide for a given service name, or null if unknown. */
 export function getCancellationGuide(name: string): CancellationGuide | null {

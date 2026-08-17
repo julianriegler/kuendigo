@@ -1,3 +1,7 @@
+import { analyzeEndpoint } from './apiConfig';
+import { loadDeviceToken } from './storage';
+import { rememberQuotaFromResponse } from './quota';
+
 export interface Subscription {
   id: string;
   name: string;
@@ -6,6 +10,8 @@ export interface Subscription {
   category: string;
   lastCharged: string;  // YYYY-MM-DD
   nextCharge: string;
+  cancelled?: boolean;  // vom Nutzer als gekündigt markiert (persistiert)
+  cancelledAt?: string; // YYYY-MM-DD, wann markiert wurde
 }
 
 // ─── Prompts ────────────────────────────────────────────────────────────────
@@ -49,38 +55,50 @@ ${BASE_INSTRUCTION}`;
 
 // ─── Core API call ───────────────────────────────────────────────────────────
 
+/**
+ * Ruft Claude auf. Standardweg ist der eigene Proxy /api/analyze: er nutzt den
+ * Serverschlüssel samt Freikontingent und umgeht die CORS-Sperre des Browsers.
+ * Ein eigener Key wird als x-anthropic-key mitgeschickt und läuft am
+ * Kontingent vorbei. Nur wenn die Proxy-Adresse unbekannt ist (Native ohne
+ * EXPO_PUBLIC_API_BASE_URL), geht der Aufruf direkt an Anthropic.
+ */
 async function callClaude(
   apiKey: string,
   messages: object[]
 ): Promise<string> {
-  // On web (Vercel): route through /api/analyze proxy to avoid CORS issues
-  // On native: call Anthropic API directly
-  const isWeb = typeof window !== 'undefined';
+  const body = JSON.stringify({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 2048,
+    messages,
+  });
 
-  const url = isWeb
-    ? '/api/analyze'
-    : 'https://api.anthropic.com/v1/messages';
+  const endpoint = analyzeEndpoint();
+  let response: Response;
 
-  const headers: Record<string, string> = isWeb
-    ? {
-        'Content-Type': 'application/json',
-        'x-anthropic-key': apiKey,        // proxy reads this header
-      }
-    : {
+  if (endpoint) {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'x-device-token': await loadDeviceToken(),
+    };
+    if (apiKey) headers['x-anthropic-key'] = apiKey;
+    response = await fetch(endpoint, { method: 'POST', headers, body });
+    rememberQuotaFromResponse(response);
+  } else if (apiKey) {
+    response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
         'Content-Type': 'application/json',
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
-      };
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2048,
-      messages,
-    }),
-  });
+      },
+      body,
+    });
+  } else {
+    throw new Error(
+      'Die Analyse ist auf diesem Gerät nicht eingerichtet. Trage in den Einstellungen ' +
+      'deinen eigenen Anthropic API Key ein.',
+    );
+  }
 
   if (!response.ok) {
     const errBody = await response.json().catch(() => ({}));
@@ -261,6 +279,10 @@ export function daysUntilCharge(nextCharge: string): number {
   const next = new Date(nextCharge);
   return Math.round((next.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
+
+// Die Umrechnung liegt in subscriptionMath, damit sie ohne Expo testbar bleibt.
+export { monthlyAmount, annualAmount, cancelledSavings } from './subscriptionMath';
+export type { Savings } from './subscriptionMath';
 
 // ─── Demo data ───────────────────────────────────────────────────────────────
 

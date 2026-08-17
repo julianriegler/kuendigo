@@ -5,6 +5,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
     "@expo/metro-runtime": "~57.0.8",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "~57.0.10",
     "expo-constants": "~57.0.9",
     "expo-document-picker": "~57.0.1",
@@ -22,13 +23,19 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "playwright-core": "^1.62.1"
   },
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "test:store": "node scripts/store-test/build-and-run.mjs",
+    "test:web": "node scripts/web-test/run.mjs",
+    "test:api": "node --experimental-strip-types --no-warnings scripts/api-test/run.mjs",
+    "dev:api": "npx vercel dev",
+    "test:logic": "node --experimental-strip-types --no-warnings scripts/logic-test/run.ts"
   },
   "private": true
 }

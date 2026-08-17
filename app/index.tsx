@@ -1,13 +1,40 @@
+import { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { colors } from '../constants/theme';
 import { getApiKey } from '../utils/storage';
+import { monthlyAmount } from '../utils/analyzeSubscriptions';
+import { loadResults } from '../utils/resultStore';
+import { fetchQuota, getCachedQuota, quotaAvailable, type Quota } from '../utils/quota';
 
 const { width } = Dimensions.get('window');
+
+function formatEur(amount: number) {
+  return `€${amount.toFixed(2).replace('.', ',')}`;
+}
 
 export default function WelcomeScreen() {
   const router = useRouter();
   const hasKey = !!getApiKey();
+  const [savedCount, setSavedCount] = useState(0);
+  const [savedMonthly, setSavedMonthly] = useState(0);
+  const [quota, setQuota] = useState<Quota | null>(getCachedQuota());
+
+  // Gespeicherte Abos bei jedem Fokus neu laden (z. B. nach dem Löschen)
+  useFocusEffect(
+    useCallback(() => {
+      let alive = true;
+      (async () => {
+        const subs = await loadResults();
+        if (!alive) return;
+        setSavedCount(subs.length);
+        setSavedMonthly(subs.reduce((sum, s) => sum + monthlyAmount(s), 0));
+        const q = await fetchQuota();
+        if (alive && q) setQuota(q);
+      })();
+      return () => { alive = false; };
+    }, [])
+  );
 
   return (
     <View style={styles.container}>
@@ -16,10 +43,14 @@ export default function WelcomeScreen() {
         <Text style={styles.settingsIcon}>⚙️</Text>
       </TouchableOpacity>
 
-      {/* Demo mode badge */}
-      {!hasKey && (
-        <TouchableOpacity style={styles.demoBadge} onPress={() => router.push('/settings')}>
-          <Text style={styles.demoBadgeText}>Demo-Modus · API Key eintragen →</Text>
+      {/* Freikontingent */}
+      {!hasKey && quotaAvailable() && (
+        <TouchableOpacity style={styles.freeBadge} onPress={() => router.push('/settings')}>
+          <Text style={styles.freeBadgeText}>
+            {quota
+              ? `🎁 ${quota.remaining} von ${quota.limit} Analysen frei`
+              : '🎁 3 Analysen pro Monat gratis'}
+          </Text>
         </TouchableOpacity>
       )}
 
@@ -45,6 +76,23 @@ export default function WelcomeScreen() {
         Kündigo findet alle Abos{'\n'}
         die du vergessen hast.
       </Text>
+
+      {/* Gespeicherte Abos */}
+      {savedCount > 0 && (
+        <TouchableOpacity
+          style={styles.savedCard}
+          onPress={() => router.push('/results')}
+          activeOpacity={0.85}
+        >
+          <View style={styles.savedLeft}>
+            <Text style={styles.savedLabel}>Deine gespeicherten Abos</Text>
+            <Text style={styles.savedValue}>
+              {savedCount} {savedCount === 1 ? 'Abo' : 'Abos'} · {formatEur(savedMonthly)} / Monat
+            </Text>
+          </View>
+          <Text style={styles.savedArrow}>→</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Stats row */}
       <View style={styles.statsRow}>
@@ -165,6 +213,41 @@ const styles = StyleSheet.create({
     marginBottom: 36,
   },
 
+  // Gespeicherte Abos
+  savedCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: `${colors.accent}12`,
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    width: '100%',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: `${colors.accent}35`,
+  },
+  savedLeft: { flex: 1 },
+  savedLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginBottom: 4,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  savedValue: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    letterSpacing: -0.3,
+  },
+  savedArrow: {
+    fontSize: 20,
+    color: colors.accent,
+    fontWeight: '700',
+    marginLeft: 12,
+  },
+
   // Stats
   statsRow: {
     flexDirection: 'row',
@@ -232,21 +315,21 @@ const styles = StyleSheet.create({
   },
   settingsIcon: { fontSize: 22 },
 
-  // Demo badge
-  demoBadge: {
+  // Freikontingent
+  freeBadge: {
     position: 'absolute',
     top: 56,
     left: 24,
-    backgroundColor: `${colors.warning}20`,
+    backgroundColor: `${colors.accent}18`,
     borderRadius: 10,
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: `${colors.warning}40`,
+    borderColor: `${colors.accent}35`,
   },
-  demoBadgeText: {
+  freeBadgeText: {
     fontSize: 11,
-    color: colors.warning,
+    color: colors.accent,
     fontWeight: '600',
   },
 });

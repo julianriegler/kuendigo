@@ -5,7 +5,8 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors } from '../constants/theme';
-import { getApiKey, setApiKey, clearApiKey } from '../utils/storage';
+import { loadApiKey, setApiKey, clearApiKey } from '../utils/storage';
+import { fetchQuota, getCachedQuota, quotaAvailable, type Quota } from '../utils/quota';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -13,16 +14,26 @@ export default function SettingsScreen() {
   const [saved, setSaved] = useState(false);
   const [hasKey, setHasKey] = useState(false);
   const [showKey, setShowKey] = useState(false);
+  const [quota, setQuota] = useState<Quota | null>(getCachedQuota());
 
   useEffect(() => {
-    const existing = getApiKey();
-    if (existing) {
-      setKey(existing);
-      setHasKey(true);
-    }
+    let alive = true;
+    (async () => {
+      const existing = await loadApiKey();
+      if (!alive) return;
+      if (existing) {
+        setKey(existing);
+        setHasKey(true);
+      }
+      const q = await fetchQuota();
+      if (alive && q) setQuota(q);
+    })();
+    return () => { alive = false; };
   }, []);
 
-  function save() {
+  const hasFreeQuota = quotaAvailable();
+
+  async function save() {
     const trimmed = key.trim();
     if (!trimmed.startsWith('sk-ant-')) {
       Alert.alert(
@@ -31,28 +42,30 @@ export default function SettingsScreen() {
       );
       return;
     }
-    setApiKey(trimmed);
+    await setApiKey(trimmed);
     setHasKey(true);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   }
 
+  async function removeKey() {
+    await clearApiKey();
+    setKey('');
+    setHasKey(false);
+    const q = await fetchQuota();
+    if (q) setQuota(q);
+  }
+
   function remove() {
-    Alert.alert(
-      'API Key löschen?',
-      'Du wechselst in den Demo-Modus. Screenshots und Uploads werden nicht mehr echt analysiert.',
-      [
-        { text: 'Abbrechen', style: 'cancel' },
-        {
-          text: 'Löschen', style: 'destructive',
-          onPress: () => {
-            clearApiKey();
-            setKey('');
-            setHasKey(false);
-          },
-        },
-      ],
-    );
+    const text = 'Danach laufen deine Analysen wieder über das Freikontingent von Kündigo.';
+    if (Platform.OS === 'web') {
+      if (window.confirm(`API Key löschen?\n\n${text}`)) removeKey();
+      return;
+    }
+    Alert.alert('API Key löschen?', text, [
+      { text: 'Abbrechen', style: 'cancel' },
+      { text: 'Löschen', style: 'destructive', onPress: removeKey },
+    ]);
   }
 
   function openConsole() {
@@ -74,24 +87,30 @@ export default function SettingsScreen() {
 
       {/* Status card */}
       <View style={[styles.statusCard, hasKey ? styles.statusCardActive : styles.statusCardDemo]}>
-        <Text style={styles.statusIcon}>{hasKey ? '✅' : '🔵'}</Text>
+        <Text style={styles.statusIcon}>{hasKey ? '✅' : '🎁'}</Text>
         <View style={styles.statusText}>
           <Text style={[styles.statusTitle, hasKey ? styles.statusTitleActive : styles.statusTitleDemo]}>
-            {hasKey ? 'Echte KI-Analyse aktiv' : 'Demo-Modus aktiv'}
+            {hasKey ? 'Eigener API Key aktiv' : hasFreeQuota ? 'Freikontingent aktiv' : 'Noch kein Zugang'}
           </Text>
           <Text style={styles.statusSub}>
             {hasKey
-              ? 'Deine Screenshots und Uploads werden mit Claude analysiert.'
-              : 'Trage deinen Anthropic API Key ein, um echte Abos zu erkennen.'}
+              ? 'Deine Analysen laufen über deinen eigenen Key, ohne Limit von Kündigo.'
+              : !hasFreeQuota
+                ? 'Auf diesem Gerät steht gerade kein Freikontingent bereit. Trage deinen eigenen Anthropic API Key ein, dann kann es losgehen.'
+                : quota
+                  ? `Noch ${quota.remaining} von ${quota.limit} Analysen diesen Monat frei. Danach brauchst du einen eigenen Key oder Kündigo Pro.`
+                  : 'Drei Analysen pro Monat sind gratis. Danach brauchst du einen eigenen Key oder Kündigo Pro.'}
           </Text>
         </View>
       </View>
 
       {/* API Key section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>🔑 Anthropic API Key</Text>
+        <Text style={styles.sectionTitle}>
+          🔑 Eigener Anthropic API Key {hasFreeQuota ? '(optional)' : ''}
+        </Text>
         <Text style={styles.sectionDesc}>
-          Der Key wird nur auf deinem Gerät gespeichert und nie weitergegeben. Er wird ausschließlich für die Abo-Analyse verwendet.
+          Ohne Key analysierst du über das Freikontingent. Mit eigenem Key gibt es kein Limit, du zahlst direkt bei Anthropic. Der Key wird nur auf deinem Gerät gespeichert und ausschließlich für die Abo-Analyse verwendet.
         </Text>
 
         <View style={styles.inputRow}>
@@ -153,7 +172,7 @@ export default function SettingsScreen() {
         <View style={styles.costBox}>
           <Text style={styles.costIcon}>💰</Text>
           <Text style={styles.costText}>
-            Kosten: ca. 1–3 Cent pro Analyse. Neue Konten erhalten $5 Gratisguthaben — das reicht für hunderte Analysen.
+            Kosten: ca. 1 bis 3 Cent pro Analyse. Neue Konten bekommen $5 Gratisguthaben, das reicht für hunderte Analysen.
           </Text>
         </View>
       </View>
@@ -162,7 +181,7 @@ export default function SettingsScreen() {
       <View style={styles.privacyBox}>
         <Text style={styles.privacyTitle}>🔒 Datenschutz</Text>
         <Text style={styles.privacyText}>
-          Dein API Key wird ausschließlich lokal auf deinem Gerät gespeichert. Kündigo sendet ihn nur direkt an die Anthropic API — niemals an eigene Server. Deine Kontoauszüge und Screenshots verlassen dein Gerät nur für die KI-Analyse und werden nicht gespeichert.
+          Dein API Key wird ausschließlich lokal auf deinem Gerät gespeichert. Für die Analyse geht er zusammen mit deinen Daten über den Kündigo-Proxy an Anthropic, wird dort aber nicht gespeichert. Für das Freikontingent zählt Kündigo nur eine anonyme Geräte-Kennung und die Anzahl deiner Analysen pro Monat, ohne Namen, Konto oder Inhalte. Deine Kontoauszüge und Screenshots werden nicht gespeichert.
         </Text>
       </View>
     </ScrollView>
