@@ -116,7 +116,13 @@ function CancellationModal({
       onRequestClose={onClose}
     >
       <View style={ms.overlay}>
-        <TouchableOpacity style={ms.backdrop} onPress={onClose} activeOpacity={1} />
+        <TouchableOpacity
+          style={ms.backdrop}
+          onPress={onClose}
+          activeOpacity={1}
+          accessibilityRole="button"
+          accessibilityLabel="Kündigungsanleitung schließen"
+        />
         <View style={ms.sheet}>
           {/* Handle */}
           <View style={ms.handle} />
@@ -132,7 +138,13 @@ function CancellationModal({
                 <Text style={ms.serviceAmount}>{formatEur(monthly)} / Monat</Text>
               </View>
             </View>
-            <TouchableOpacity onPress={onClose} style={ms.closeBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+            <TouchableOpacity
+              onPress={onClose}
+              style={ms.closeBtn}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityRole="button"
+              accessibilityLabel="Schließen"
+            >
               <Text style={ms.closeBtnText}>✕</Text>
             </TouchableOpacity>
           </View>
@@ -185,6 +197,8 @@ function CancellationModal({
               style={ms.primaryBtn}
               onPress={() => openUrl(actionUrl)}
               activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={isAppStore ? 'iPhone Einstellungen öffnen' : 'Zur Kündigungsseite'}
             >
               <Text style={ms.primaryBtnText}>
                 {isAppStore ? '📱 iPhone Einstellungen öffnen' : '🔗 Zur Kündigungsseite'}
@@ -197,11 +211,23 @@ function CancellationModal({
 
             {/* Mark as cancelled */}
             {sub.cancelled ? (
-              <TouchableOpacity style={ms.undoBtn} onPress={onUndoCancelled} activeOpacity={0.8}>
+              <TouchableOpacity
+                style={ms.undoBtn}
+                onPress={onUndoCancelled}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Doch nicht gekündigt"
+              >
                 <Text style={ms.undoBtnText}>↩︎ Doch nicht gekündigt</Text>
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity style={ms.doneBtn} onPress={onMarkCancelled} activeOpacity={0.8}>
+              <TouchableOpacity
+                style={ms.doneBtn}
+                onPress={onMarkCancelled}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Als gekündigt markieren"
+              >
                 <Text style={ms.doneBtnText}>✓ Als gekündigt markieren</Text>
               </TouchableOpacity>
             )}
@@ -295,17 +321,33 @@ function SubscriptionCard({
             style={styles.deleteBtn}
             onPress={onDelete}
             activeOpacity={0.75}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            accessibilityRole="button"
             accessibilityLabel={`${sub.name} entfernen`}
           >
             <Text style={styles.deleteBtnText}>🗑 Entfernen</Text>
           </TouchableOpacity>
 
           {isCancelled ? (
-            <TouchableOpacity style={styles.cancelledBtn} onPress={onCancel} activeOpacity={0.75}>
+            <TouchableOpacity
+              style={styles.cancelledBtn}
+              onPress={onCancel}
+              activeOpacity={0.75}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              accessibilityRole="button"
+              accessibilityLabel={`${sub.name}, Kündigung erledigt, Anleitung erneut öffnen`}
+            >
               <Text style={styles.cancelledBtnText}>✓ Erledigt</Text>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={styles.cancelBtn} onPress={onCancel} activeOpacity={0.75}>
+            <TouchableOpacity
+              style={styles.cancelBtn}
+              onPress={onCancel}
+              activeOpacity={0.75}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              accessibilityRole="button"
+              accessibilityLabel={`${sub.name} kündigen`}
+            >
               <Text style={styles.cancelBtnText}>Kündigen →</Text>
             </TouchableOpacity>
           )}
@@ -452,10 +494,22 @@ export default function ResultsScreen() {
       <ScrollView style={styles.scroll} contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.push('/')} style={styles.backBtn}>
+          <TouchableOpacity
+            onPress={() => router.push('/')}
+            style={styles.backBtn}
+            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+            accessibilityRole="button"
+            accessibilityLabel="Neu analysieren"
+          >
             <Text style={styles.backText}>← Neu analysieren</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={shareResults} style={styles.shareBtn}>
+          <TouchableOpacity
+            onPress={shareResults}
+            style={styles.shareBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel="Ergebnis teilen"
+          >
             <Text style={styles.shareText}>Teilen 📤</Text>
           </TouchableOpacity>
         </View>
@@ -533,6 +587,9 @@ export default function ResultsScreen() {
                     <TouchableOpacity
                       style={[styles.urgentCancelBtn, isCancelled && { backgroundColor: `${colors.accent}30` }]}
                       onPress={() => openCancelModal(sub)}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      accessibilityRole="button"
+                      accessibilityLabel={isCancelled ? `${sub.name}, Kündigung erledigt, Anleitung erneut öffnen` : `${sub.name} kündigen`}
                     >
                       <Text style={[styles.urgentCancelText, isCancelled && { color: colors.accent }]}>
                         {isCancelled ? '✓ Erledigt' : 'Kündigen →'}
@@ -609,7 +666,13 @@ export default function ResultsScreen() {
           </Text>
         </View>
 
-        <TouchableOpacity style={styles.shareFullBtn} onPress={shareResults} activeOpacity={0.85}>
+        <TouchableOpacity
+          style={styles.shareFullBtn}
+          onPress={shareResults}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel="Ergebnis teilen"
+        >
           <Text style={styles.shareFullBtnText}>Ergebnis teilen 📤</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -908,17 +971,17 @@ const styles = StyleSheet.create({
   textStrikethrough: { textDecorationLine: 'line-through', color: colors.textTertiary },
   cardMeta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   catBadge: { borderRadius: 6, paddingVertical: 2, paddingHorizontal: 7 },
-  catBadgeText: { fontSize: 11, fontWeight: '600' },
+  catBadgeText: { fontSize: 12, fontWeight: '600' },
   cardFreq: { fontSize: 12, color: colors.textTertiary },
   cancelledBadge: {
     backgroundColor: `${colors.accent}20`, borderRadius: 6,
     paddingVertical: 2, paddingHorizontal: 7,
     borderWidth: 1, borderColor: `${colors.accent}40`,
   },
-  cancelledBadgeText: { fontSize: 11, fontWeight: '700', color: colors.accent },
+  cancelledBadgeText: { fontSize: 12, fontWeight: '700', color: colors.accent },
   cardAmountWrap: { alignItems: 'flex-end' },
   cardAmount: { fontSize: 18, fontWeight: '800', color: colors.textPrimary, letterSpacing: -0.5 },
-  cardAmountLabel: { fontSize: 11, color: colors.textTertiary },
+  cardAmountLabel: { fontSize: 12, color: colors.textTertiary },
 
   cardBottom: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

@@ -45,13 +45,25 @@ export default function WelcomeScreen() {
       showsVerticalScrollIndicator={false}
     >
       {/* Settings button */}
-      <TouchableOpacity style={styles.settingsBtn} onPress={() => router.push('/settings')}>
+      <TouchableOpacity
+        style={styles.settingsBtn}
+        onPress={() => router.push('/settings')}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        accessibilityRole="button"
+        accessibilityLabel="Einstellungen öffnen"
+      >
         <Text style={styles.settingsIcon}>⚙️</Text>
       </TouchableOpacity>
 
       {/* Freikontingent */}
       {!hasKey && quotaAvailable() && (
-        <TouchableOpacity style={styles.freeBadge} onPress={() => router.push('/settings')}>
+        <TouchableOpacity
+          style={styles.freeBadge}
+          onPress={() => router.push('/settings')}
+          hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel="Freikontingent, Einstellungen öffnen"
+        >
           <Text style={styles.freeBadgeText}>
             {quota
               ? `🎁 ${quota.remaining} von ${quota.limit} Analysen frei`
@@ -89,6 +101,8 @@ export default function WelcomeScreen() {
           style={styles.savedCard}
           onPress={() => router.push('/results')}
           activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel={`Gespeicherte Abos ansehen, ${savedCount} ${savedCount === 1 ? 'Abo' : 'Abos'}, ${formatEur(savedMonthly)} pro Monat`}
         >
           <View style={styles.savedLeft}>
             <Text style={styles.savedLabel}>Deine gespeicherten Abos</Text>
@@ -130,6 +144,8 @@ export default function WelcomeScreen() {
         style={styles.ctaButton}
         onPress={() => router.push('/upload')}
         activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel="Jetzt analysieren"
       >
         <Text style={styles.ctaText}>Jetzt analysieren →</Text>
       </TouchableOpacity>
@@ -150,11 +166,21 @@ export default function WelcomeScreen() {
 
       {/* Rechtliches */}
       <View style={styles.footerLinks}>
-        <TouchableOpacity onPress={() => router.push('/impressum')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <TouchableOpacity
+          onPress={() => router.push('/impressum')}
+          hitSlop={{ top: 16, bottom: 16, left: 14, right: 14 }}
+          accessibilityRole="button"
+          accessibilityLabel="Impressum öffnen"
+        >
           <Text style={styles.footerLink}>Impressum</Text>
         </TouchableOpacity>
         <Text style={styles.footerSeparator}>·</Text>
-        <TouchableOpacity onPress={() => router.push('/datenschutz')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <TouchableOpacity
+          onPress={() => router.push('/datenschutz')}
+          hitSlop={{ top: 16, bottom: 16, left: 14, right: 14 }}
+          accessibilityRole="button"
+          accessibilityLabel="Datenschutzerklärung öffnen"
+        >
           <Text style={styles.footerLink}>Datenschutz</Text>
         </TouchableOpacity>
       </View>
@@ -296,7 +322,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   statsHeading: {
-    fontSize: 10,
+    fontSize: 12,
     letterSpacing: 1,
     textTransform: 'uppercase',
     color: colors.textTertiary,
@@ -305,10 +331,10 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   statsSource: {
-    fontSize: 10,
+    fontSize: 12,
     color: colors.textTertiary,
     textAlign: 'center',
-    lineHeight: 14,
+    lineHeight: 16,
     marginTop: 12,
   },
   statsRow: {
@@ -326,7 +352,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   statLabel: {
-    fontSize: 11,
+    fontSize: 12,
     color: colors.textTertiary,
     textAlign: 'center',
   },
@@ -355,10 +381,10 @@ const styles = StyleSheet.create({
 
   // Datenschutzhinweis
   privacyNote: {
-    fontSize: 11,
+    fontSize: 12,
     color: colors.textTertiary,
     textAlign: 'center',
-    lineHeight: 16,
+    lineHeight: 18,
   },
   privacyNoteLink: {
     color: colors.accent,
@@ -404,7 +430,7 @@ const styles = StyleSheet.create({
     borderColor: `${colors.accent}35`,
   },
   freeBadgeText: {
-    fontSize: 11,
+    fontSize: 12,
     color: colors.accent,
     fontWeight: '600',
   },

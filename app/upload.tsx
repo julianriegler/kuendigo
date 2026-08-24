@@ -5,7 +5,8 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+// Legacy-Einstieg: readAsStringAsync wirft im neuen Hauptmodul zur Laufzeit.
+import * as FileSystem from 'expo-file-system/legacy';
 import { colors } from '../constants/theme';
 import {
   analyzeStatement, analyzeScreenshot, analyzeEmails,
@@ -397,13 +398,25 @@ export default function UploadScreen() {
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
-      <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+      <TouchableOpacity
+        onPress={() => router.back()}
+        style={styles.backBtn}
+        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        accessibilityRole="button"
+        accessibilityLabel="Zurück"
+      >
         <Text style={styles.backText}>← Zurück</Text>
       </TouchableOpacity>
 
       <View style={styles.headerRow}>
         <Text style={styles.title}>Wo sind deine Abos?</Text>
-        <TouchableOpacity onPress={() => router.push('/settings')} style={styles.settingsLink}>
+        <TouchableOpacity
+          onPress={() => router.push('/settings')}
+          style={styles.settingsLink}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          accessibilityRole="button"
+          accessibilityLabel="Einstellungen öffnen"
+        >
           <Text style={styles.settingsLinkIcon}>⚙️</Text>
         </TouchableOpacity>
       </View>
@@ -413,7 +426,13 @@ export default function UploadScreen() {
 
       {/* Freikontingent */}
       {!apiKey && quotaAvailable() && (
-        <TouchableOpacity style={styles.quotaBanner} onPress={() => router.push('/settings')} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={styles.quotaBanner}
+          onPress={() => router.push('/settings')}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Freikontingent, Einstellungen öffnen"
+        >
           <Text style={styles.quotaBannerIcon}>🎁</Text>
           <View style={styles.quotaBannerText}>
             <Text style={styles.quotaBannerTitle}>
@@ -431,7 +450,13 @@ export default function UploadScreen() {
 
       {/* Error banner */}
       {errorMsg && (
-        <TouchableOpacity style={styles.errorBanner} onPress={() => setErrorMsg(null)} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={styles.errorBanner}
+          onPress={() => setErrorMsg(null)}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={`Fehlermeldung schließen: ${errorMsg}`}
+        >
           <Text style={styles.errorBannerIcon}>❌</Text>
           <Text style={styles.errorBannerText}>{errorMsg}</Text>
           <Text style={styles.errorBannerClose}>✕</Text>
@@ -455,6 +480,8 @@ export default function UploadScreen() {
               style={[styles.sourceCard, isActive && styles.sourceCardActive]}
               onPress={() => selectSource(source)}
               activeOpacity={0.75}
+              accessibilityRole="button"
+              accessibilityLabel={`${source.title}, ${isActive ? 'Bereich einklappen' : 'Bereich aufklappen'}`}
             >
               <View style={styles.sourceLeft}>
                 <Text style={styles.sourceIcon}>{source.icon}</Text>
@@ -509,6 +536,8 @@ export default function UploadScreen() {
                       style={[styles.uploadArea, fileName && styles.uploadAreaDone]}
                       onPress={pickFile}
                       activeOpacity={0.8}
+                      accessibilityRole="button"
+                      accessibilityLabel={fileName ? `Datei gewählt: ${fileName}, andere Datei wählen` : 'Datei auswählen, CSV oder PDF'}
                     >
                       {fileName ? (
                         <>
@@ -527,6 +556,9 @@ export default function UploadScreen() {
                     <TouchableOpacity
                       style={styles.demoLink}
                       onPress={() => { setFileName('beispiel-auszug.csv'); setFileContent(SAMPLE_STATEMENT); }}
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                      accessibilityRole="button"
+                      accessibilityLabel="Beispiel-Auszug einsetzen"
                     >
                       <Text style={styles.demoLinkText}>Beispiel-Auszug einsetzen →</Text>
                     </TouchableOpacity>
@@ -540,6 +572,8 @@ export default function UploadScreen() {
                       style={[styles.uploadArea, screenshotB64 && styles.uploadAreaDone]}
                       onPress={pickScreenshot}
                       activeOpacity={0.8}
+                      accessibilityRole="button"
+                      accessibilityLabel={screenshotB64 ? `Screenshot gewählt: ${screenshotName}, anderes Foto wählen` : 'Screenshot hochladen, Foto aus deiner Galerie'}
                     >
                       {screenshotB64 ? (
                         <>
@@ -575,6 +609,9 @@ export default function UploadScreen() {
                     <TouchableOpacity
                       style={styles.demoLink}
                       onPress={() => setEmailText('Netflix Rechnung: €13,99 am 15.07.2026\nSpotify Premium monatlich €9,99 am 20.07.2026\nAdobe Creative Cloud €54,99 Rechnung Juli 2026\nAmazon Prime Mitgliedschaft €8,99 am 10.07.2026')}
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                      accessibilityRole="button"
+                      accessibilityLabel="Beispiel-Text einfügen"
                     >
                       <Text style={styles.demoLinkText}>Beispiel-Text einfügen →</Text>
                     </TouchableOpacity>
@@ -590,6 +627,8 @@ export default function UploadScreen() {
                   onPress={analyze}
                   disabled={loading || !hasInput}
                   activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel="Abos analysieren"
                 >
                   {loading
                     ? <ActivityIndicator color={colors.bg} />
@@ -611,7 +650,13 @@ export default function UploadScreen() {
             speichert sie nicht, die erkannten Abos bleiben auf deinem Gerät. Vor der ersten
             Analyse fragen wir dich einmal um deine Zustimmung.
           </Text>
-          <TouchableOpacity onPress={() => router.push('/datenschutz')} activeOpacity={0.7}>
+          <TouchableOpacity
+            onPress={() => router.push('/datenschutz')}
+            activeOpacity={0.7}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityRole="button"
+            accessibilityLabel="Details in der Datenschutzerklärung öffnen"
+          >
             <Text style={styles.privacyLink}>Details in der Datenschutzerklärung →</Text>
           </TouchableOpacity>
         </View>
@@ -665,7 +710,7 @@ const styles = StyleSheet.create({
   quotaBannerIcon: { fontSize: 18 },
   quotaBannerText: { flex: 1 },
   quotaBannerTitle: { fontSize: 13, fontWeight: '700', color: colors.accent, marginBottom: 2 },
-  quotaBannerSub: { fontSize: 11, color: colors.textSecondary, lineHeight: 16 },
+  quotaBannerSub: { fontSize: 12, color: colors.textSecondary, lineHeight: 17 },
   quotaBannerArrow: { fontSize: 16, color: colors.accent },
 
   // Coverage bar
@@ -703,9 +748,9 @@ const styles = StyleSheet.create({
     backgroundColor: `${colors.accent}25`, borderRadius: 8,
     paddingHorizontal: 7, paddingVertical: 2,
   },
-  badgeText: { fontSize: 10, fontWeight: '700', color: colors.accent, letterSpacing: 0.3 },
+  badgeText: { fontSize: 12, fontWeight: '700', color: colors.accent, letterSpacing: 0.3 },
 
-  chevron: { fontSize: 10, color: colors.textTertiary, marginLeft: 8 },
+  chevron: { fontSize: 12, color: colors.textTertiary, marginLeft: 8 },
   chevronActive: { color: colors.accent },
 
   // Expanded panel
@@ -725,7 +770,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     marginTop: 1,
   },
-  stepNumText: { fontSize: 11, fontWeight: '700', color: colors.accent },
+  stepNumText: { fontSize: 12, fontWeight: '700', color: colors.accent },
   stepText: { flex: 1, fontSize: 13, color: colors.textSecondary, lineHeight: 20 },
 
   // Tip

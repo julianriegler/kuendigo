@@ -137,7 +137,13 @@ export default function ManualScreen() {
   return (
     <>
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-      <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+      <TouchableOpacity
+        onPress={() => router.back()}
+        style={styles.backBtn}
+        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        accessibilityRole="button"
+        accessibilityLabel="Zurück"
+      >
         <Text style={styles.backText}>← Zurück</Text>
       </TouchableOpacity>
 
@@ -146,7 +152,13 @@ export default function ManualScreen() {
 
       {/* Freikontingent: auch das Ergänzen läuft über eine Analyse */}
       {!apiKey && quotaAvailable() && (
-        <TouchableOpacity style={styles.quotaBanner} onPress={() => router.push('/settings')} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={styles.quotaBanner}
+          onPress={() => router.push('/settings')}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Freikontingent, Einstellungen öffnen"
+        >
           <Text style={styles.quotaBannerText}>
             🎁 {quota
               ? `Noch ${quota.remaining} von ${quota.limit} Gratis-Analysen diesen Monat`
@@ -157,7 +169,13 @@ export default function ManualScreen() {
       )}
 
       {errorMsg && (
-        <TouchableOpacity style={styles.errorBanner} onPress={() => setErrorMsg(null)} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={styles.errorBanner}
+          onPress={() => setErrorMsg(null)}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={`Fehlermeldung schließen: ${errorMsg}`}
+        >
           <Text style={styles.errorBannerText}>{errorMsg}</Text>
           <Text style={styles.errorBannerClose}>✕</Text>
         </TouchableOpacity>
@@ -184,6 +202,9 @@ export default function ManualScreen() {
             style={[styles.chip, name === s.name && styles.chipActive]}
             onPress={() => handleAutofill(s.name)}
             activeOpacity={0.75}
+            hitSlop={{ top: 4, bottom: 4, left: 0, right: 0 }}
+            accessibilityRole="button"
+            accessibilityLabel={`${s.name} auswählen, Preis automatisch ergänzen`}
           >
             <Text style={styles.chipEmoji}>{s.emoji}</Text>
             <Text style={[styles.chipLabel, name === s.name && styles.chipLabelActive]}>{s.name}</Text>
@@ -209,6 +230,9 @@ export default function ManualScreen() {
             style={[styles.autofillBtn, autofilling && styles.autofillBtnLoading]}
             onPress={() => name.trim() && handleAutofill(name.trim())}
             disabled={autofilling || !name.trim()}
+            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            accessibilityRole="button"
+            accessibilityLabel="Preis automatisch mit KI ergänzen"
           >
             {autofilling
               ? <ActivityIndicator color={colors.accent} size="small" />
@@ -236,6 +260,9 @@ export default function ManualScreen() {
               key={f.id}
               style={[styles.freqChip, frequency === f.id && styles.freqChipActive]}
               onPress={() => setFrequency(f.id)}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              accessibilityRole="button"
+              accessibilityLabel={`Zahlungsintervall ${f.label}`}
             >
               <Text style={[styles.freqLabel, frequency === f.id && styles.freqLabelActive]}>
                 {f.label}
@@ -254,6 +281,9 @@ export default function ManualScreen() {
                 key={k}
                 style={[styles.catChip, category === k && styles.catChipActive]}
                 onPress={() => setCategory(k)}
+                hitSlop={{ top: 7, bottom: 7, left: 7, right: 7 }}
+                accessibilityRole="button"
+                accessibilityLabel={`Kategorie ${cat.label}`}
               >
                 <Text style={styles.catEmoji}>{cat.emoji}</Text>
                 <Text style={[styles.catLabel, category === k && styles.catLabelActive]}>{cat.label}</Text>
@@ -262,7 +292,13 @@ export default function ManualScreen() {
           })}
         </ScrollView>
 
-        <TouchableOpacity style={styles.addBtn} onPress={addSubscription} activeOpacity={0.85}>
+        <TouchableOpacity
+          style={styles.addBtn}
+          onPress={addSubscription}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel="Abo hinzufügen"
+        >
           <Text style={styles.addBtnText}>+ Abo hinzufügen</Text>
         </TouchableOpacity>
       </View>
@@ -286,7 +322,13 @@ export default function ManualScreen() {
                   <Text style={styles.subAmount}>€{s.amount.toFixed(2)}</Text>
                   <Text style={styles.subPer}>/Mo</Text>
                 </View>
-                <TouchableOpacity onPress={() => removeSubscription(s.id)} style={styles.subRemove}>
+                <TouchableOpacity
+                  onPress={() => removeSubscription(s.id)}
+                  style={styles.subRemove}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${s.name} entfernen`}
+                >
                   <Text style={styles.subRemoveText}>✕</Text>
                 </TouchableOpacity>
               </View>
@@ -301,7 +343,13 @@ export default function ManualScreen() {
             </Text>
           </View>
 
-          <TouchableOpacity style={styles.resultsBtn} onPress={goToResults} activeOpacity={0.85}>
+          <TouchableOpacity
+            style={styles.resultsBtn}
+            onPress={goToResults}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Analyse anzeigen"
+          >
             <Text style={styles.resultsBtnText}>Analyse anzeigen →</Text>
           </TouchableOpacity>
         </>
@@ -356,7 +404,7 @@ const styles = StyleSheet.create({
   errorBannerClose: { fontSize: 13, color: colors.danger, fontWeight: '700' },
 
   sectionLabel: {
-    fontSize: 11, letterSpacing: 1, textTransform: 'uppercase',
+    fontSize: 12, letterSpacing: 1, textTransform: 'uppercase',
     color: colors.textTertiary, fontWeight: '700', marginBottom: 12,
   },
 
@@ -460,7 +508,7 @@ const styles = StyleSheet.create({
   subMeta: { fontSize: 12, color: colors.textTertiary },
   subRight: { alignItems: 'flex-end', marginRight: 10 },
   subAmount: { fontSize: 15, fontWeight: '800', color: colors.textPrimary, fontVariant: ['tabular-nums'] },
-  subPer: { fontSize: 11, color: colors.textTertiary },
+  subPer: { fontSize: 12, color: colors.textTertiary },
   subRemove: { padding: 4 },
   subRemoveText: { color: colors.danger, fontSize: 14 },
 

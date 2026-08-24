@@ -8,6 +8,8 @@ import { colors } from '../constants/theme';
 import { loadApiKey, setApiKey, clearApiKey } from '../utils/storage';
 import { fetchQuota, getCachedQuota, quotaAvailable, type Quota } from '../utils/quota';
 import { loadConsent, revokeConsent, isConsentValid, type Consent } from '../utils/consent';
+import { loadResults, clearResults } from '../utils/resultStore';
+import { exportSubscriptions } from '../utils/exportData';
 
 /** ISO-Zeitpunkt als TT.MM.JJJJ um HH:MM. */
 function formatConsentDate(iso: string): string {
@@ -64,7 +66,7 @@ export default function SettingsScreen() {
   async function save() {
     const trimmed = key.trim();
     if (!trimmed.startsWith('sk-ant-')) {
-      Alert.alert(
+      meldung(
         'Ungültiger Key',
         'Anthropic API Keys beginnen mit „sk-ant-". Bitte prüfe deinen Key auf console.anthropic.com.',
       );
@@ -105,9 +107,54 @@ export default function SettingsScreen() {
     }
   }
 
+  // Alert.alert ist in react-native-web ein No-Op, deshalb die Weiche.
+  function meldung(titel: string, text: string) {
+    if (Platform.OS === 'web') window.alert(`${titel}\n\n${text}`);
+    else Alert.alert(titel, text);
+  }
+
+  async function handleExport(format: 'csv' | 'json') {
+    const subs = await loadResults();
+    if (subs.length === 0) {
+      meldung('Keine Daten', 'Es sind noch keine Abos gespeichert.');
+      return;
+    }
+    try {
+      await exportSubscriptions(subs, format);
+    } catch (err: any) {
+      meldung('Export fehlgeschlagen', err?.message ?? 'Die Datei konnte nicht erstellt werden.');
+    }
+  }
+
+  async function deleteAllData() {
+    await clearResults();
+    await revokeConsent();
+    await clearApiKey();
+    setConsent(null);
+    router.replace('/');
+  }
+
+  function confirmDeleteAll() {
+    const text = 'Deine gespeicherten Abos, die Einwilligung und ein hinterlegter API Key werden unwiderruflich von diesem Gerät gelöscht.';
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Alle Daten löschen?\n\n${text}`)) deleteAllData();
+      return;
+    }
+    Alert.alert('Alle Daten löschen?', text, [
+      { text: 'Abbrechen', style: 'cancel' },
+      { text: 'Alles löschen', style: 'destructive', onPress: deleteAllData },
+    ]);
+  }
+
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-      <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+      <TouchableOpacity
+        onPress={() => router.back()}
+        style={styles.backBtn}
+        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        accessibilityRole="button"
+        accessibilityLabel="Zurück"
+      >
         <Text style={styles.backText}>← Zurück</Text>
       </TouchableOpacity>
 
@@ -152,7 +199,13 @@ export default function SettingsScreen() {
             autoCapitalize="none"
             autoCorrect={false}
           />
-          <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowKey(v => !v)}>
+          <TouchableOpacity
+            style={styles.eyeBtn}
+            onPress={() => setShowKey(v => !v)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel={showKey ? 'API Key verbergen' : 'API Key anzeigen'}
+          >
             <Text style={styles.eyeIcon}>{showKey ? '🙈' : '👁️'}</Text>
           </TouchableOpacity>
         </View>
@@ -161,12 +214,20 @@ export default function SettingsScreen() {
           style={[styles.saveBtn, saved && styles.saveBtnSuccess]}
           onPress={save}
           activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel="API Key speichern"
         >
           <Text style={styles.saveBtnText}>{saved ? '✓ Gespeichert!' : 'Speichern'}</Text>
         </TouchableOpacity>
 
         {hasKey && (
-          <TouchableOpacity style={styles.deleteBtn} onPress={remove}>
+          <TouchableOpacity
+            style={styles.deleteBtn}
+            onPress={remove}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityRole="button"
+            accessibilityLabel="API Key löschen"
+          >
             <Text style={styles.deleteBtnText}>Key löschen</Text>
           </TouchableOpacity>
         )}
@@ -193,7 +254,13 @@ export default function SettingsScreen() {
           ))}
         </View>
 
-        <TouchableOpacity style={styles.consoleBtn} onPress={openConsole} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={styles.consoleBtn}
+          onPress={openConsole}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="console.anthropic.com öffnen"
+        >
           <Text style={styles.consoleBtnText}>console.anthropic.com öffnen →</Text>
         </TouchableOpacity>
 
@@ -226,7 +293,14 @@ export default function SettingsScreen() {
         </View>
 
         {consent && (
-          <TouchableOpacity style={styles.revokeBtn} onPress={revoke} activeOpacity={0.8}>
+          <TouchableOpacity
+            style={styles.revokeBtn}
+            onPress={revoke}
+            activeOpacity={0.8}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel={consentGranted ? 'Einwilligung widerrufen' : 'Alte Einwilligung löschen'}
+          >
             <Text style={styles.revokeBtnText}>
               {consentGranted ? 'Einwilligung widerrufen' : 'Alte Einwilligung löschen'}
             </Text>
@@ -237,13 +311,64 @@ export default function SettingsScreen() {
       {/* Rechtliches */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Rechtliches</Text>
-        <TouchableOpacity style={styles.legalRow} onPress={() => router.push('/impressum')} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={styles.legalRow}
+          onPress={() => router.push('/impressum')}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Impressum öffnen"
+        >
           <Text style={styles.legalRowText}>Impressum</Text>
           <Text style={styles.legalRowArrow}>→</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.legalRow} onPress={() => router.push('/datenschutz')} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={styles.legalRow}
+          onPress={() => router.push('/datenschutz')}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Datenschutzerklärung öffnen"
+        >
           <Text style={styles.legalRowText}>Datenschutzerklärung</Text>
           <Text style={styles.legalRowArrow}>→</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Meine Daten */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>📦 Meine Daten</Text>
+        <Text style={styles.sectionDesc}>
+          Exportiere deine gespeicherten Abos oder lösche alle Daten unwiderruflich von diesem Gerät.
+        </Text>
+
+        <View style={styles.exportRow}>
+          <TouchableOpacity
+            style={styles.exportBtn}
+            onPress={() => handleExport('csv')}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Abos als CSV exportieren"
+          >
+            <Text style={styles.exportBtnText}>Als CSV exportieren</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.exportBtn}
+            onPress={() => handleExport('json')}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Abos als JSON exportieren"
+          >
+            <Text style={styles.exportBtnText}>Als JSON exportieren</Text>
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity
+          style={styles.deleteAllBtn}
+          onPress={confirmDeleteAll}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Alle Daten unwiderruflich löschen"
+        >
+          <Text style={styles.deleteAllBtnText}>Alle Daten löschen</Text>
         </TouchableOpacity>
       </View>
 
@@ -253,7 +378,13 @@ export default function SettingsScreen() {
         <Text style={styles.privacyText}>
           Dein API Key wird ausschließlich lokal auf deinem Gerät gespeichert. Für die Analyse geht er zusammen mit deinen hochgeladenen Inhalten über den Kündigo-Proxy an Anthropic in den USA. Kündigo speichert diese Inhalte nicht, Anthropic bewahrt sie kurzzeitig zur Missbrauchsprüfung auf. Für das Freikontingent zählt Kündigo nur eine anonyme Geräte-Kennung und die Anzahl deiner Analysen pro Monat, ohne Namen, Konto oder Inhalte.
         </Text>
-        <TouchableOpacity onPress={() => router.push('/datenschutz')} activeOpacity={0.7}>
+        <TouchableOpacity
+          onPress={() => router.push('/datenschutz')}
+          activeOpacity={0.7}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          accessibilityRole="button"
+          accessibilityLabel="Alle Details in der Datenschutzerklärung öffnen"
+        >
           <Text style={styles.privacyLink}>Alle Details in der Datenschutzerklärung →</Text>
         </TouchableOpacity>
       </View>
@@ -335,7 +466,7 @@ const styles = StyleSheet.create({
     backgroundColor: `${colors.accent}20`,
     alignItems: 'center', justifyContent: 'center', marginTop: 1,
   },
-  stepNumText: { fontSize: 11, fontWeight: '700', color: colors.accent },
+  stepNumText: { fontSize: 12, fontWeight: '700', color: colors.accent },
   stepText: { flex: 1, fontSize: 13, color: colors.textSecondary, lineHeight: 20 },
 
   // Console button
@@ -381,6 +512,21 @@ const styles = StyleSheet.create({
   },
   legalRowText: { fontSize: 14, color: colors.textPrimary, fontWeight: '600' },
   legalRowArrow: { fontSize: 15, color: colors.accent },
+
+  // Meine Daten
+  exportRow: { flexDirection: 'row', gap: 10 },
+  exportBtn: {
+    flex: 1, backgroundColor: colors.surface2, borderRadius: 12,
+    paddingVertical: 14, alignItems: 'center',
+    borderWidth: 1, borderColor: colors.border, minHeight: 44,
+  },
+  exportBtnText: { fontSize: 13, fontWeight: '600', color: colors.textPrimary },
+  deleteAllBtn: {
+    alignItems: 'center', paddingVertical: 14, minHeight: 44, justifyContent: 'center',
+    borderRadius: 12, borderWidth: 1, borderColor: `${colors.danger}40`,
+    backgroundColor: `${colors.danger}12`,
+  },
+  deleteAllBtnText: { fontSize: 14, fontWeight: '700', color: colors.danger },
 
   // Privacy
   privacyBox: {
