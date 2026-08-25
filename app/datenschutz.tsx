@@ -22,8 +22,8 @@ export default function DatenschutzScreen() {
       <Section heading="1. Verantwortlicher">
         <Field label="Name" value="JR COACHING & CONSULTING LTD" />
         <Field label="Register" value="Registrar of Companies, Republik Zypern, Nr. HE 482984" />
-        <Field label="Anschrift" value="wird nachgetragen" /> {/* RECHT_ANSCHRIFT */}
-        <Field label="E-Mail" value="wird nachgetragen" /> {/* RECHT_EMAIL */}
+        <Field label="Anschrift" value="Karatza 32, 3020 Limassol, Zypern" /> {/* RECHT_ANSCHRIFT */}
+        <Field label="E-Mail" value="kontakt@klickmill.app" /> {/* RECHT_EMAIL */}
         <P>
           Ein Datenschutzbeauftragter ist nicht bestellt, weil die Voraussetzungen nach Art. 37 DSGVO
           nicht vorliegen. Die vollständigen Angaben stehen im Impressum.

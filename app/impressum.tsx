@@ -22,9 +22,9 @@ export default function ImpressumScreen() {
         <Field label="Name" value="JR COACHING & CONSULTING LTD" />
         <Field label="Vertreten durch" value="Julian Riegler (Direktor)" />
         <Field label="Registereintrag" value="Registrar of Companies, Republik Zypern, Nr. HE 482984" />
-        <Field label="Anschrift" value="wird nachgetragen" /> {/* RECHT_ANSCHRIFT */}
+        <Field label="Anschrift" value="Karatza 32, 3020 Limassol" /> {/* RECHT_ANSCHRIFT */}
         <Field label="Land" value="Zypern" />
-        <Field label="E-Mail" value="wird nachgetragen" /> {/* RECHT_EMAIL */}
+        <Field label="E-Mail" value="kontakt@klickmill.app" /> {/* RECHT_EMAIL */}
       </Section>
 
       <Section heading="Unternehmensgegenstand">
