@@ -20,9 +20,10 @@ export default function DatenschutzScreen() {
       </PlaceholderNote>
 
       <Section heading="1. Verantwortlicher">
-        <Field label="Name" value="[Vor- und Nachname bzw. Firmenwortlaut]" />
-        <Field label="Anschrift" value="[Straße, PLZ, Ort, Österreich]" />
-        <Field label="E-Mail" value="[datenschutz@example.at]" />
+        <Field label="Name" value="JR COACHING & CONSULTING LTD" />
+        <Field label="Register" value="Registrar of Companies, Republik Zypern, Nr. HE 482984" />
+        <Field label="Anschrift" value="wird nachgetragen" /> {/* RECHT_ANSCHRIFT */}
+        <Field label="E-Mail" value="wird nachgetragen" /> {/* RECHT_EMAIL */}
         <P>
           Ein Datenschutzbeauftragter ist nicht bestellt, weil die Voraussetzungen nach Art. 37 DSGVO
           nicht vorliegen. Die vollständigen Angaben stehen im Impressum.
@@ -162,15 +163,14 @@ export default function DatenschutzScreen() {
 
       <Section heading="11. Beschwerde bei der Aufsichtsbehörde">
         <P>
-          Du hast das Recht, dich bei einer Aufsichtsbehörde zu beschweren. Zuständig in Österreich ist:
+          Du hast das Recht, dich bei einer Aufsichtsbehörde zu beschweren. Zuständig für
+          unseren Sitz ist:
         </P>
-        <Field label="Behörde" value="Österreichische Datenschutzbehörde" />
-        <Field label="Anschrift" value="Barichgasse 40-42, 1030 Wien" />
-        <Field label="E-Mail" value="dsb@dsb.gv.at" />
-        <ExternalLink label="dsb.gv.at" url="https://www.dsb.gv.at" />
+        <Field label="Behörde" value="Commissioner for Personal Data Protection, Republik Zypern" />
+        <ExternalLink label="dataprotection.gov.cy" url="https://www.dataprotection.gov.cy" />
         <P>
-          Nutzt du die App aus Deutschland, kannst du dich auch an die Aufsichtsbehörde deines
-          Bundeslandes wenden.
+          Daneben kannst du dich auch an die Datenschutz-Aufsichtsbehörde deines eigenen
+          Wohnortes wenden.
         </P>
       </Section>
     </LegalPage>
