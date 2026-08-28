@@ -9,6 +9,8 @@
  * fertige neue Liste zurückgeben kann und die Screens sie direkt anzeigen.
  */
 import { readValue, writeValue } from './kvStorage';
+import { loadReminderSettings } from './storage';
+import { scheduleRemindersForSubs } from './reminders';
 import type { Subscription } from './analyzeSubscriptions';
 
 const COMBINING_MARKS = /[\u0300-\u036f]/g;
@@ -118,6 +120,15 @@ async function persist(subs: Subscription[]): Promise<Subscription[]> {
   cache = subs;
   hydrated = true;
   persistFailed = !(await writeRaw(JSON.stringify(subs)));
+
+  // Planungen aktuell halten: sobald sich die Abo-Liste ändert, neu planen,
+  // aber nur wenn Erinnerungen aktiv sind (kein neuer Mechanismus, dieselbe
+  // zentrale Speicherstelle wie jede andere Mutation).
+  const reminderSettings = await loadReminderSettings();
+  if (reminderSettings.enabled) {
+    await scheduleRemindersForSubs(subs, reminderSettings.daysBefore);
+  }
+
   return [...cache];
 }
 

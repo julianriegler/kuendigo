@@ -1,16 +1,22 @@
 import { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  TextInput, Alert, Linking, Platform,
+  TextInput, Alert, Linking, Platform, Switch,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors } from '../constants/theme';
-import { loadApiKey, setApiKey, clearApiKey, clearSenderInfo } from '../utils/storage';
+import {
+  loadApiKey, setApiKey, clearApiKey, clearSenderInfo,
+  loadReminderSettings, saveReminderSettings, type ReminderSettings,
+} from '../utils/storage';
 import { meldung } from '../utils/meldung';
 import { fetchQuota, getCachedQuota, quotaAvailable, type Quota } from '../utils/quota';
 import { loadConsent, revokeConsent, isConsentValid, type Consent } from '../utils/consent';
 import { loadResults, clearResults } from '../utils/resultStore';
 import { exportSubscriptions } from '../utils/exportData';
+import { requestReminderPermission, scheduleRemindersForSubs } from '../utils/reminders';
+
+const LEAD_DAYS_OPTIONS: ReminderSettings['daysBefore'][] = [1, 3, 7];
 
 /** ISO-Zeitpunkt als TT.MM.JJJJ um HH:MM. */
 function formatConsentDate(iso: string): string {
@@ -28,6 +34,7 @@ export default function SettingsScreen() {
   const [showKey, setShowKey] = useState(false);
   const [quota, setQuota] = useState<Quota | null>(getCachedQuota());
   const [consent, setConsent] = useState<Consent | null>(null);
+  const [reminderSettings, setReminderSettings] = useState<ReminderSettings>({ enabled: false, daysBefore: 3 });
 
   useEffect(() => {
     let alive = true;
@@ -42,6 +49,8 @@ export default function SettingsScreen() {
       if (alive) setConsent(stored);
       const q = await fetchQuota();
       if (alive && q) setQuota(q);
+      const reminders = await loadReminderSettings();
+      if (alive) setReminderSettings(reminders);
     })();
     return () => { alive = false; };
   }, []);
@@ -140,6 +149,35 @@ export default function SettingsScreen() {
       { text: 'Abbrechen', style: 'cancel' },
       { text: 'Alles löschen', style: 'destructive', onPress: deleteAllData },
     ]);
+  }
+
+  /** Berechtigung erst hier abfragen. Ablehnung: Schalter bleibt aus, mit Hinweis. */
+  async function toggleReminders(next: boolean) {
+    if (next) {
+      const granted = await requestReminderPermission();
+      if (!granted) {
+        meldung(
+          'Berechtigung fehlt',
+          'Ohne Erlaubnis für Benachrichtigungen kann Kündigo dich nicht vor der nächsten Abbuchung erinnern. Du kannst sie jederzeit in den Geräte-Einstellungen erteilen.',
+        );
+        return;
+      }
+    }
+    const updated: ReminderSettings = { ...reminderSettings, enabled: next };
+    setReminderSettings(updated);
+    await saveReminderSettings(updated);
+    const subs = next ? await loadResults() : [];
+    await scheduleRemindersForSubs(subs, updated.daysBefore);
+  }
+
+  async function changeReminderLeadDays(days: ReminderSettings['daysBefore']) {
+    const updated: ReminderSettings = { ...reminderSettings, daysBefore: days };
+    setReminderSettings(updated);
+    await saveReminderSettings(updated);
+    if (updated.enabled) {
+      const subs = await loadResults();
+      await scheduleRemindersForSubs(subs, days);
+    }
   }
 
   return (
@@ -301,6 +339,56 @@ export default function SettingsScreen() {
               {consentGranted ? 'Einwilligung widerrufen' : 'Alte Einwilligung löschen'}
             </Text>
           </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Erinnerungen */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>🔔 Erinnerungen vor Abbuchung</Text>
+        {Platform.OS === 'web' ? (
+          <Text style={styles.sectionDesc}>
+            Erinnerungen brauchen die installierte App für iOS oder Android. Im Browser kann Kündigo keine Benachrichtigungen planen.
+          </Text>
+        ) : (
+          <>
+            <Text style={styles.sectionDesc}>
+              Kündigo erinnert dich rechtzeitig vor der nächsten Abbuchung, damit du ein Abo noch kündigen kannst.
+            </Text>
+
+            <View style={styles.reminderRow}>
+              <Text style={styles.reminderRowLabel}>Erinnerungen aktiv</Text>
+              <Switch
+                value={reminderSettings.enabled}
+                onValueChange={toggleReminders}
+                trackColor={{ false: colors.border, true: colors.accent }}
+                accessibilityRole="switch"
+                accessibilityLabel="Erinnerungen vor Abbuchung an- oder ausschalten"
+              />
+            </View>
+
+            {reminderSettings.enabled && (
+              <View style={styles.leadDaysRow}>
+                {LEAD_DAYS_OPTIONS.map(days => {
+                  const active = reminderSettings.daysBefore === days;
+                  return (
+                    <TouchableOpacity
+                      key={days}
+                      style={[styles.leadDaysChip, active && styles.leadDaysChipActive]}
+                      onPress={() => changeReminderLeadDays(days)}
+                      activeOpacity={0.8}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${days} ${days === 1 ? 'Tag' : 'Tage'} vorher erinnern`}
+                      accessibilityState={{ selected: active }}
+                    >
+                      <Text style={[styles.leadDaysChipText, active && styles.leadDaysChipTextActive]}>
+                        {days} {days === 1 ? 'Tag' : 'Tage'}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </>
         )}
       </View>
 
@@ -499,6 +587,24 @@ const styles = StyleSheet.create({
     backgroundColor: `${colors.danger}12`,
   },
   revokeBtnText: { fontSize: 14, fontWeight: '700', color: colors.danger },
+
+  // Erinnerungen
+  reminderRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    minHeight: 44,
+  },
+  reminderRowLabel: { fontSize: 14, fontWeight: '600', color: colors.textPrimary },
+  leadDaysRow: { flexDirection: 'row', gap: 10 },
+  leadDaysChip: {
+    flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center',
+    borderRadius: 12, borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.surface2,
+  },
+  leadDaysChipActive: {
+    backgroundColor: `${colors.accent}15`, borderColor: colors.accent,
+  },
+  leadDaysChipText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
+  leadDaysChipTextActive: { color: colors.accent },
 
   // Rechtliches
   legalRow: {

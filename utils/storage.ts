@@ -11,10 +11,12 @@ import { readValue, writeValue, deleteValue, readValueSync } from './kvStorage';
 const API_KEY_STORAGE_KEY = 'kuendigo_api_key';
 const DEVICE_TOKEN_STORAGE_KEY = 'kuendigo_device_v1';
 const SENDER_INFO_STORAGE_KEY = 'kuendigo_sender_info_v1';
+const REMINDER_SETTINGS_STORAGE_KEY = 'kuendigo_reminder_settings_v1';
 
 let cachedKey = '';
 let cachedDeviceToken = '';
 let cachedSenderInfo: SenderInfo | null = null;
+let cachedReminderSettings: ReminderSettings | null = null;
 
 // ─── API Key ─────────────────────────────────────────────────────────────────
 
@@ -107,4 +109,40 @@ export async function saveSenderInfo(info: SenderInfo): Promise<void> {
 export async function clearSenderInfo(): Promise<void> {
   cachedSenderInfo = null;
   await deleteValue(SENDER_INFO_STORAGE_KEY);
+}
+
+// ─── Erinnerungen vor Abbuchung ──────────────────────────────────────────────
+
+export interface ReminderSettings {
+  enabled: boolean;
+  /** Vorlaufzeit in Tagen vor nextCharge. */
+  daysBefore: 1 | 3 | 7;
+}
+
+const DEFAULT_REMINDER_SETTINGS: ReminderSettings = { enabled: false, daysBefore: 3 };
+
+function sanitizeReminderSettings(raw: any): ReminderSettings {
+  const daysBefore = [1, 3, 7].includes(raw?.daysBefore) ? raw.daysBefore : DEFAULT_REMINDER_SETTINGS.daysBefore;
+  return { enabled: raw?.enabled === true, daysBefore };
+}
+
+/** Lädt die gespeicherte Erinnerungs-Einstellung, Default: aus. */
+export async function loadReminderSettings(): Promise<ReminderSettings> {
+  if (cachedReminderSettings) return cachedReminderSettings;
+  const raw = await readValue(REMINDER_SETTINGS_STORAGE_KEY);
+  if (!raw) {
+    cachedReminderSettings = DEFAULT_REMINDER_SETTINGS;
+    return cachedReminderSettings;
+  }
+  try {
+    cachedReminderSettings = sanitizeReminderSettings(JSON.parse(raw));
+  } catch {
+    cachedReminderSettings = DEFAULT_REMINDER_SETTINGS;
+  }
+  return cachedReminderSettings;
+}
+
+export async function saveReminderSettings(settings: ReminderSettings): Promise<void> {
+  cachedReminderSettings = sanitizeReminderSettings(settings);
+  await writeValue(REMINDER_SETTINGS_STORAGE_KEY, JSON.stringify(cachedReminderSettings));
 }
