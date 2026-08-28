@@ -191,11 +191,15 @@ export async function setResults(subs: Subscription[]): Promise<Subscription[]> 
 /**
  * Fügt eine neue Analyse additiv zur gespeicherten Liste hinzu.
  * Duplikate (normalisierter Name + Betrag) werden zusammengeführt.
+ *
+ * Basis ist der Cache OHNE Demo-Abos: eine echte Analyse (Upload oder
+ * manuelle Eingabe, beide laufen hier durch) ersetzt die Beispieldaten aus
+ * dem Onboarding, statt sie unter die echten Ergebnisse zu mischen.
  */
 export async function mergeResults(subs: Subscription[]): Promise<Subscription[]> {
   if (!hydrated) await loadResults();
   const clean = (subs ?? []).map(sanitize).filter(Boolean) as Subscription[];
-  return persist(mergeLists(cache, clean));
+  return persist(mergeLists(cache.filter(s => !s.demo), clean));
 }
 
 /** Legt ein Abo an oder aktualisiert ein bestehendes (ID, sonst Duplikat-Schlüssel). */

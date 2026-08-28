@@ -6,7 +6,7 @@ import {
 import { useRouter } from 'expo-router';
 import { colors } from '../constants/theme';
 import { DEMO_SUBSCRIPTIONS } from '../utils/analyzeSubscriptions';
-import { setResults } from '../utils/resultStore';
+import { loadResults, setResults } from '../utils/resultStore';
 import { setOnboarded } from '../utils/storage';
 
 const STEPS = [
@@ -42,21 +42,46 @@ export default function OnboardingScreen() {
    * Sofort-Demo ohne Hürde: schreibt die Beispieldaten in den Store (als
    * demo markiert, siehe resultStore.ts/analyzeSubscriptions.ts) und geht
    * direkt zum Ergebnis, ohne API Key und ohne Kontoauszug.
+   *
+   * Bestandsnutzer, die ohne kuendigo_onboarded-Flag hier landen (Update
+   * einer laufenden App), dürfen NICHT überschrieben werden: erst prüfen,
+   * ob schon echte (nicht-demo) Abos gespeichert sind, dann nur navigieren.
    */
   async function beispielAnsehen() {
     await setOnboarded();
-    await setResults(DEMO_SUBSCRIPTIONS.map(sub => ({ ...sub, demo: true })));
+    const bestehende = await loadResults();
+    if (!bestehende.some(s => !s.demo)) {
+      await setResults(DEMO_SUBSCRIPTIONS.map(sub => ({ ...sub, demo: true })));
+    }
     router.replace('/results');
+  }
+
+  /** Direkt weiter ohne Beispiel, für alle die den Pager nicht brauchen. */
+  async function ueberspringen() {
+    await setOnboarded();
+    router.replace('/');
   }
 
   return (
     <View style={styles.root}>
+      <TouchableOpacity
+        style={styles.skipBtn}
+        onPress={ueberspringen}
+        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        accessibilityRole="button"
+        accessibilityLabel="Onboarding überspringen"
+      >
+        <Text style={styles.skipText}>Überspringen</Text>
+      </TouchableOpacity>
+
       <ScrollView
         ref={scrollRef}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={onScrollEnd}
+        onScroll={onScrollEnd}
+        scrollEventThrottle={16}
         style={styles.pager}
       >
         {STEPS.map((step, i) => (
@@ -93,6 +118,12 @@ export default function OnboardingScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, justifyContent: 'space-between' },
   pager: { flexGrow: 0 },
+
+  skipBtn: {
+    position: 'absolute', top: 56, right: 24, zIndex: 1,
+    minHeight: 44, justifyContent: 'center',
+  },
+  skipText: { fontSize: 14, color: colors.textSecondary, fontWeight: '600' },
 
   slide: {
     alignItems: 'center', justifyContent: 'center',

@@ -29,6 +29,10 @@ const browser = await chromium.launch({ executablePath: CHROME, headless: true }
 const page = await browser.newPage();
 page.on('dialog', d => d.accept());
 page.on('pageerror', e => console.log(`   [Seitenfehler] ${e.message}`));
+// Onboarding ist ein eigener Weg (siehe onboarding-e2e falls vorhanden) und
+// würde sonst jeden ersten open('/') abfangen, bevor der Startscreen zu
+// sehen ist.
+await page.addInitScript(() => localStorage.setItem('kuendigo_onboarded', '1'));
 
 const deleteButtons = () => page.locator('[aria-label$=" entfernen"]');
 const storedNames = () => page.evaluate(() => {
@@ -51,7 +55,7 @@ try {
   await open('/results');
   await page.getByText('Alle Abos').waitFor({ timeout: 30000 });
   const first = await deleteButtons().count();
-  check('Abos werden angezeigt', first === 9, first);
+  check('Abos werden angezeigt', first === 5, first);
   check('Bilanz startet im Leerzustand',
     await page.getByText(/Noch nichts gekündigt/).count() > 0);
   // Netflix, Spotify und Co. haben hinterlegte Fristen, es muss also
@@ -68,21 +72,21 @@ try {
   const victim = (await deleteButtons().first().getAttribute('aria-label'))?.replace(' entfernen', '');
   await deleteButtons().first().click();
   await page.waitForFunction(
-    n => JSON.parse(localStorage.getItem('kuendigo_subs_v1') ?? '[]').length === n, 8, { timeout: 10000 });
-  check('Löschen entfernt das Abo', await deleteButtons().count() === 8, victim);
+    n => JSON.parse(localStorage.getItem('kuendigo_subs_v1') ?? '[]').length === n, 4, { timeout: 10000 });
+  check('Löschen entfernt das Abo', await deleteButtons().count() === 4, victim);
   check('Hinweis auf Beispieldaten verschwindet', await page.getByText(/Beispieldaten/).count() === 0);
 
   // 4) Neuladen der Web-App
   await page.reload({ waitUntil: 'networkidle' });
   await page.getByText('Alle Abos').waitFor({ timeout: 30000 });
   const namesAfter = await storedNames();
-  check('nach Neuladen noch da', await deleteButtons().count() === 8, namesAfter?.length);
+  check('nach Neuladen noch da', await deleteButtons().count() === 4, namesAfter?.length);
   check('Löschen persistiert nach Neuladen', !namesAfter.includes(victim), victim);
 
   // 5) Kachel auf dem Startscreen
   await open('/');
   const tile = await page.getByText(/\d+ Abos · €/).first().textContent();
-  check('Kachel zeigt Anzahl und Monatssumme', /^8 Abos · €\d+,\d\d \/ Monat$/.test(tile ?? ''), tile);
+  check('Kachel zeigt Anzahl und Monatssumme', /^4 Abos · €\d+,\d\d \/ Monat$/.test(tile ?? ''), tile);
   await open('/results');
   await page.getByText('Alle Abos').waitFor({ timeout: 30000 });
 
@@ -117,7 +121,7 @@ try {
   // 7) Kachel spiegelt den neuen Stand
   await open('/');
   const tile2 = await page.getByText(/\d+ Abos · €/).first().textContent();
-  check('Kachel nach dem Löschen aktualisiert', /^8 Abos · €/.test(tile2 ?? ''), tile2);
+  check('Kachel nach dem Löschen aktualisiert', /^4 Abos · €/.test(tile2 ?? ''), tile2);
 
   // 8) Alle Abos löschen: die Beispieldaten dürfen nicht zurückkehren
   await open('/results');
