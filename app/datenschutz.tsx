@@ -41,6 +41,7 @@ export default function DatenschutzScreen() {
         <Bullet>kuendigo_device_v1: eine zufällige Geräte-Kennung ohne Personenbezug, nur für das Freikontingent.</Bullet>
         <Bullet>kuendigo_api_key: dein eigener Anthropic API Key, falls du einen hinterlegst.</Bullet>
         <Bullet>kuendigo_consent_v1: Zeitpunkt, Textversion und Wortlaut deiner Einwilligung in die Analyse.</Bullet>
+        <Bullet>kuendigo_sender_info_v1: Name, Anschrift und optional E-Mail für Kündigungsschreiben, nur auf deinem Gerät.</Bullet>
         <P>
           Du kannst diese Daten jederzeit selbst löschen: einzelne Abos über „Entfernen" in der
           Liste, alles zusammen über das Löschen der Website-Daten im Browser bzw. das Löschen der App.
@@ -141,7 +142,7 @@ export default function DatenschutzScreen() {
       </Section>
 
       <Section heading="8. Speicherdauer">
-        <Bullet>Abo-Liste, Geräte-Kennung und eigener API Key: auf deinem Gerät, bis du sie löschst.</Bullet>
+        <Bullet>Abo-Liste, Geräte-Kennung, eigener API Key und Absenderdaten fürs Kündigungsschreiben: auf deinem Gerät, bis du sie löschst.</Bullet>
         <Bullet>Einwilligung: auf deinem Gerät, bis du sie widerrufst oder die App-Daten löschst.</Bullet>
         <Bullet>Zähler für das Freikontingent: rund 40 Tage, danach läuft der Eintrag automatisch ab.</Bullet>
         <Bullet>Hochgeladene Inhalte bei uns: keine Speicherung, sie werden nur durchgereicht.</Bullet>
