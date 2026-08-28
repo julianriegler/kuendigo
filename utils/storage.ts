@@ -10,9 +10,11 @@ import { readValue, writeValue, deleteValue, readValueSync } from './kvStorage';
 
 const API_KEY_STORAGE_KEY = 'kuendigo_api_key';
 const DEVICE_TOKEN_STORAGE_KEY = 'kuendigo_device_v1';
+const SENDER_INFO_STORAGE_KEY = 'kuendigo_sender_info_v1';
 
 let cachedKey = '';
 let cachedDeviceToken = '';
+let cachedSenderInfo: SenderInfo | null = null;
 
 // ─── API Key ─────────────────────────────────────────────────────────────────
 
@@ -72,4 +74,32 @@ export async function loadDeviceToken(): Promise<string> {
   cachedDeviceToken = token;
   await writeValue(DEVICE_TOKEN_STORAGE_KEY, token);
   return token;
+}
+
+// ─── Absenderdaten fürs Kündigungsschreiben ─────────────────────────────────
+
+export interface SenderInfo {
+  name: string;
+  street: string;
+  zip: string;
+  city: string;
+  email?: string;
+}
+
+/** Lädt die zuletzt gespeicherten Absenderdaten, null wenn noch keine hinterlegt sind. */
+export async function loadSenderInfo(): Promise<SenderInfo | null> {
+  if (cachedSenderInfo) return cachedSenderInfo;
+  const raw = await readValue(SENDER_INFO_STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    cachedSenderInfo = JSON.parse(raw) as SenderInfo;
+    return cachedSenderInfo;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveSenderInfo(info: SenderInfo): Promise<void> {
+  cachedSenderInfo = info;
+  await writeValue(SENDER_INFO_STORAGE_KEY, JSON.stringify(info));
 }

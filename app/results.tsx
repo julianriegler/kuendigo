@@ -1,7 +1,7 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Share, Linking, Platform, Modal, ActivityIndicator, Alert
+  Share, Linking, Platform, Modal, ActivityIndicator, Alert, TextInput
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { colors, categories } from '../constants/theme';
@@ -15,6 +15,8 @@ import {
   loadResults, setResults, upsertSubscription, removeSubscription,
   normalizeList, lastPersistFailed, hasStoredResults,
 } from '../utils/resultStore';
+import { buildLetterHtml } from '../utils/cancellationLetter';
+import { loadSenderInfo, saveSenderInfo, type SenderInfo } from '../utils/storage';
 
 function formatEur(amount: number) {
   return `€${amount.toFixed(2).replace('.', ',')}`;
@@ -74,6 +76,12 @@ async function openUrl(url: string) {
   }
 }
 
+// Alert.alert ist in react-native-web ein No-Op, deshalb die Weiche.
+function meldung(titel: string, text: string) {
+  if (Platform.OS === 'web') window.alert(`${titel}\n\n${text}`);
+  else Alert.alert(titel, text);
+}
+
 // ─── Cancellation Modal ───────────────────────────────────────────────────────
 
 function CancellationModal({
@@ -87,6 +95,7 @@ function CancellationModal({
   onMarkCancelled: () => void;
   onUndoCancelled: () => void;
 }) {
+  const [letterFormVisible, setLetterFormVisible] = useState(false);
   const cat = categories[sub.category] ?? categories.other;
   const monthly = monthlyAmount(sub);
   const guide = getCancellationGuide(sub.name);
@@ -209,6 +218,17 @@ function CancellationModal({
               Kehre nach der Kündigung zu Kündigo zurück und bestätige es hier.
             </Text>
 
+            {/* Kündigungsschreiben als PDF */}
+            <TouchableOpacity
+              style={ms.letterBtn}
+              onPress={() => setLetterFormVisible(true)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Kündigungsschreiben erstellen"
+            >
+              <Text style={ms.letterBtnText}>📄 Kündigungsschreiben erstellen</Text>
+            </TouchableOpacity>
+
             {/* Mark as cancelled */}
             {sub.cancelled ? (
               <TouchableOpacity
@@ -231,6 +251,225 @@ function CancellationModal({
                 <Text style={ms.doneBtnText}>✓ Als gekündigt markieren</Text>
               </TouchableOpacity>
             )}
+          </ScrollView>
+        </View>
+      </View>
+
+      {letterFormVisible && (
+        <LetterFormModal sub={sub} onClose={() => setLetterFormVisible(false)} />
+      )}
+    </Modal>
+  );
+}
+
+// ─── Letter Form Modal ────────────────────────────────────────────────────────
+
+function LetterFormModal({ sub, onClose }: { sub: Subscription; onClose: () => void }) {
+  const [name, setName] = useState('');
+  const [street, setStreet] = useState('');
+  const [zip, setZip] = useState('');
+  const [city, setCity] = useState('');
+  const [email, setEmail] = useState('');
+  const [customerNumber, setCustomerNumber] = useState('');
+  const [contractStart, setContractStart] = useState('');
+  const [desiredDate, setDesiredDate] = useState('');
+
+  // Zuletzt gespeicherte Absenderdaten vorausfüllen, damit sie nicht bei
+  // jedem Kündigungsschreiben neu eingetippt werden müssen.
+  useEffect(() => {
+    let alive = true;
+    loadSenderInfo().then(info => {
+      if (!alive || !info) return;
+      setName(info.name ?? '');
+      setStreet(info.street ?? '');
+      setZip(info.zip ?? '');
+      setCity(info.city ?? '');
+      setEmail(info.email ?? '');
+    });
+    return () => { alive = false; };
+  }, []);
+
+  function printOnWeb(html: string) {
+    const win = window.open('', '_blank');
+    if (!win) {
+      meldung('Fenster blockiert', 'Bitte Pop-ups für Kündigo erlauben und erneut versuchen.');
+      return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    // Kurze Verzögerung, damit der Browser das Dokument fertig gerendert hat, bevor der Druckdialog öffnet.
+    setTimeout(() => win.print(), 300);
+  }
+
+  async function createLetter() {
+    if (!name.trim() || !street.trim() || !zip.trim() || !city.trim()) {
+      meldung('Angaben fehlen', 'Bitte Name, Straße, PLZ und Ort ausfüllen.');
+      return;
+    }
+
+    const sender: SenderInfo = {
+      name: name.trim(),
+      street: street.trim(),
+      zip: zip.trim(),
+      city: city.trim(),
+      email: email.trim() || undefined,
+    };
+    await saveSenderInfo(sender);
+
+    const html = buildLetterHtml({
+      sender,
+      serviceName: sub.name,
+      customerNumber: customerNumber.trim() || undefined,
+      contractStart: contractStart.trim() || undefined,
+      desiredDate: desiredDate.trim() || undefined,
+    });
+
+    if (Platform.OS === 'web') {
+      printOnWeb(html);
+      onClose();
+      return;
+    }
+
+    // expo-print ist in diesem Projekt nicht installiert (siehe package.json),
+    // die PDF-Erstellung läuft deshalb aktuell nur im Web-Build.
+    meldung(
+      'Nur im Web verfügbar',
+      'Die PDF-Erstellung für Kündigungsschreiben ist aktuell nur in der Web-Version von Kündigo verfügbar.'
+    );
+  }
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <View style={ms.overlay}>
+        <TouchableOpacity
+          style={ms.backdrop}
+          onPress={onClose}
+          activeOpacity={1}
+          accessibilityRole="button"
+          accessibilityLabel="Formular schließen"
+        />
+        <View style={ms.sheet}>
+          <View style={ms.handle} />
+
+          <View style={ms.header}>
+            <Text style={ms.serviceName}>Absenderdaten</Text>
+            <TouchableOpacity
+              onPress={onClose}
+              style={ms.closeBtn}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityRole="button"
+              accessibilityLabel="Schließen"
+            >
+              <Text style={ms.closeBtnText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }} keyboardShouldPersistTaps="handled">
+            <Text style={ms.formHint}>
+              Diese Daten bleiben nur auf deinem Gerät und werden für künftige Kündigungsschreiben wiederverwendet.
+            </Text>
+
+            <Text style={ms.fieldLabel}>Name</Text>
+            <TextInput
+              style={ms.input}
+              value={name}
+              onChangeText={setName}
+              placeholder="Max Mustermann"
+              placeholderTextColor={colors.textTertiary}
+              accessibilityLabel="Name"
+            />
+
+            <Text style={ms.fieldLabel}>Straße und Hausnummer</Text>
+            <TextInput
+              style={ms.input}
+              value={street}
+              onChangeText={setStreet}
+              placeholder="Musterstraße 1"
+              placeholderTextColor={colors.textTertiary}
+              accessibilityLabel="Straße und Hausnummer"
+            />
+
+            <View style={ms.formRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={ms.fieldLabel}>PLZ</Text>
+                <TextInput
+                  style={ms.input}
+                  value={zip}
+                  onChangeText={setZip}
+                  placeholder="12345"
+                  placeholderTextColor={colors.textTertiary}
+                  keyboardType="number-pad"
+                  accessibilityLabel="Postleitzahl"
+                />
+              </View>
+              <View style={{ flex: 2 }}>
+                <Text style={ms.fieldLabel}>Ort</Text>
+                <TextInput
+                  style={ms.input}
+                  value={city}
+                  onChangeText={setCity}
+                  placeholder="Musterstadt"
+                  placeholderTextColor={colors.textTertiary}
+                  accessibilityLabel="Ort"
+                />
+              </View>
+            </View>
+
+            <Text style={ms.fieldLabel}>E-Mail (optional)</Text>
+            <TextInput
+              style={ms.input}
+              value={email}
+              onChangeText={setEmail}
+              placeholder="max@beispiel.de"
+              placeholderTextColor={colors.textTertiary}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              accessibilityLabel="E-Mail-Adresse, optional"
+            />
+
+            <Text style={ms.formSectionLabel}>Zum Vertrag (optional)</Text>
+
+            <Text style={ms.fieldLabel}>Kundennummer</Text>
+            <TextInput
+              style={ms.input}
+              value={customerNumber}
+              onChangeText={setCustomerNumber}
+              placeholder="z.B. 123456"
+              placeholderTextColor={colors.textTertiary}
+              accessibilityLabel="Kundennummer, optional"
+            />
+
+            <Text style={ms.fieldLabel}>Vertragsbeginn</Text>
+            <TextInput
+              style={ms.input}
+              value={contractStart}
+              onChangeText={setContractStart}
+              placeholder="TT.MM.JJJJ"
+              placeholderTextColor={colors.textTertiary}
+              accessibilityLabel="Vertragsbeginn, optional, Format Tag Punkt Monat Punkt Jahr"
+            />
+
+            <Text style={ms.fieldLabel}>Wunschtermin</Text>
+            <TextInput
+              style={ms.input}
+              value={desiredDate}
+              onChangeText={setDesiredDate}
+              placeholder="TT.MM.JJJJ"
+              placeholderTextColor={colors.textTertiary}
+              accessibilityLabel="Wunschtermin, optional, Format Tag Punkt Monat Punkt Jahr"
+            />
+
+            <TouchableOpacity
+              style={ms.primaryBtn}
+              onPress={createLetter}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Kündigungsschreiben erstellen"
+            >
+              <Text style={ms.primaryBtnText}>📄 Schreiben erstellen</Text>
+            </TouchableOpacity>
           </ScrollView>
         </View>
       </View>
@@ -859,6 +1098,43 @@ const ms = StyleSheet.create({
   undoBtnText: {
     fontSize: 16, fontWeight: '600',
     color: colors.textSecondary,
+  },
+
+  letterBtn: {
+    backgroundColor: colors.surface2,
+    borderRadius: 14, paddingVertical: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 12,
+  },
+  letterBtnText: {
+    fontSize: 15, fontWeight: '700',
+    color: colors.textPrimary,
+  },
+
+  // Absenderdaten-Formular
+  formHint: {
+    fontSize: 12, color: colors.textTertiary,
+    lineHeight: 17, marginBottom: 18,
+  },
+  formSectionLabel: {
+    fontSize: 12, letterSpacing: 1, textTransform: 'uppercase',
+    color: colors.textTertiary, fontWeight: '700',
+    marginTop: 8, marginBottom: 4,
+  },
+  formRow: {
+    flexDirection: 'row', gap: 10,
+  },
+  fieldLabel: {
+    fontSize: 12, fontWeight: '600', color: colors.textTertiary,
+    letterSpacing: 0.5, marginTop: 12, marginBottom: 6,
+  },
+  input: {
+    backgroundColor: colors.surface2, borderRadius: 10,
+    borderWidth: 1, borderColor: colors.border,
+    color: colors.textPrimary, fontSize: 15,
+    paddingHorizontal: 14, paddingVertical: 12,
   },
 });
 
