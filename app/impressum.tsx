@@ -14,10 +14,6 @@ export default function ImpressumScreen() {
       subtitle="Anbieterkennzeichnung"
       updatedAt="August 2026"
     >
-      <PlaceholderNote>
-        ⚠️ Geschäftsanschrift und Kontaktadresse werden nachgetragen.
-      </PlaceholderNote>
-
       <Section heading="Betreiber">
         <Field label="Name" value="JR COACHING & CONSULTING LTD" />
         <Field label="Vertreten durch" value="Julian Riegler (Direktor)" />
