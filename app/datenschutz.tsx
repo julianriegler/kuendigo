@@ -99,6 +99,15 @@ export default function DatenschutzScreen() {
         </P>
       </Section>
 
+      <Section heading="5a. Anonymer Aufrufzähler">
+        <P>
+          Beim Start ruft die App einmalig einen anonymen Zähler unter klickmill.app/api/ping auf.
+          Gespeichert werden dabei ausschließlich der App-Name und der Zeitpunkt des Aufrufs. Es
+          wird weder deine IP-Adresse noch eine sonstige Kennung gespeichert, und es werden keine
+          Cookies gesetzt.
+        </P>
+      </Section>
+
       <Section heading="6. Server-Protokolle">
         <P>
           Beim Aufruf der Web-App und der Analyse-Funktion fallen bei Vercel technische Protokolle

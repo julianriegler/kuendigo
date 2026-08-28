@@ -10,6 +10,12 @@ export default function RootLayout() {
   useEffect(() => {
     loadApiKey();
     loadDeviceToken();
+    // Anonymer Nutzungszähler (dritte Stufe der Messkette): ein Aufruf je
+    // App-Start, keine IP, kein Cookie, keine Kennung. Nicht im Entwicklungs-
+    // modus, sonst zählt jeder Reload als Nutzung.
+    if (!__DEV__) {
+      fetch('https://klickmill.app/api/ping?app=kuendigo').catch(() => {});
+    }
   }, []);
 
   return (
