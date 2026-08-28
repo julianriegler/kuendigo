@@ -1,5 +1,5 @@
 import {
-  LegalPage, Section, P, Bullet, Field, PlaceholderNote, ExternalLink, InternalLink,
+  LegalPage, Section, P, Bullet, Field, ExternalLink, InternalLink,
 } from '../components/LegalPage';
 
 /**
