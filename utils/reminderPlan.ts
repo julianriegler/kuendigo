@@ -5,34 +5,40 @@
  */
 import type { Subscription } from './analyzeSubscriptions';
 
-/** Lokales Datum -> YYYY-MM-DD, ohne UTC-Verschiebung (kein toISOString!). */
-function toIsoDate(d: Date): string {
-  const y = d.getFullYear();
-  const m = (d.getMonth() + 1).toString().padStart(2, '0');
-  const day = d.getDate().toString().padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
+/** Standard-Uhrzeit, zu der Erinnerungen feuern (lokale Stunde, 0-23). */
+export const DEFAULT_REMINDER_HOUR = 9;
 
 export interface ReminderPlan {
   subId: string;
   subName: string;
   amount: number;
-  fireDate: string;   // YYYY-MM-DD, Tag der Erinnerung
+  /** ISO-Zeitstempel des tatsächlichen Feuerungs-Zeitpunkts (absoluter Moment, keine Kalender-Zeichenkette). */
+  fireAt: string;
   nextCharge: string; // YYYY-MM-DD, Tag der Abbuchung
 }
 
 /**
- * Welche Abos bekommen eine Erinnerung X Tage vor nextCharge? Gekündigte
- * Abos, Abos ohne (gültigen) Termin und bereits vergangene Erinnerungstermine
- * werden übersprungen statt zum Absturz zu führen.
+ * Welche Abos bekommen eine Erinnerung X Tage vor nextCharge, um reminderHour
+ * Uhr? Gekündigte Abos, Abos ohne (gültigen) Termin und Erinnerungstage, die
+ * komplett in der Vergangenheit liegen, werden übersprungen statt zum
+ * Absturz zu führen.
+ *
+ * Liegt der berechnete Zeitpunkt (Tag + Uhrzeit) für den dringendsten Termin
+ * (die nächste Abbuchung) bereits in der Vergangenheit — z.B. weil nextCharge
+ * genau daysBefore Tage entfernt ist und es schon nach reminderHour Uhr ist —
+ * wird er nicht verworfen, sondern auf jetzt+5 Minuten gelegt. Andere an
+ * diesem Tag schon verstrichene Termine fallen weg.
  */
 export function computeReminderPlans(
   subs: Subscription[],
   daysBefore: number,
   now: Date = new Date(),
+  reminderHour: number = DEFAULT_REMINDER_HOUR,
 ): ReminderPlan[] {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const plans: ReminderPlan[] = [];
+
+  type Candidate = ReminderPlan & { fireAt: string; overdue: boolean };
+  const candidates: Candidate[] = [];
 
   for (const sub of subs) {
     if (sub.cancelled) continue;
@@ -42,15 +48,32 @@ export function computeReminderPlans(
 
     const fireDay = new Date(charge);
     fireDay.setDate(fireDay.getDate() - daysBefore);
-    if (fireDay < today) continue; // Vergangenheits-Termine überspringen
+    if (fireDay < today) continue; // Tag komplett vergangen: überspringen
 
-    plans.push({
+    const fireAt = new Date(fireDay);
+    fireAt.setHours(reminderHour, 0, 0, 0);
+
+    candidates.push({
       subId: sub.id,
       subName: sub.name,
       amount: sub.amount,
-      fireDate: toIsoDate(fireDay),
+      fireAt: fireAt.toISOString(),
       nextCharge: sub.nextCharge,
+      overdue: fireAt.getTime() <= now.getTime(),
     });
   }
-  return plans;
+
+  // Von den heute schon verstrichenen Zeitpunkten nur den dringendsten
+  // (die nächste Abbuchung) retten statt wortlos zu verwerfen.
+  const overdue = candidates.filter(c => c.overdue);
+  if (overdue.length > 0) {
+    overdue.sort((a, b) => a.nextCharge.localeCompare(b.nextCharge));
+    const rescued = overdue[0];
+    rescued.fireAt = new Date(now.getTime() + 5 * 60 * 1000).toISOString();
+    rescued.overdue = false;
+  }
+
+  return candidates
+    .filter(c => !c.overdue)
+    .map(({ overdue: _overdue, ...plan }) => plan);
 }
