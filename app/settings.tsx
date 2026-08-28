@@ -5,7 +5,8 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors } from '../constants/theme';
-import { loadApiKey, setApiKey, clearApiKey } from '../utils/storage';
+import { loadApiKey, setApiKey, clearApiKey, clearSenderInfo } from '../utils/storage';
+import { meldung } from '../utils/meldung';
 import { fetchQuota, getCachedQuota, quotaAvailable, type Quota } from '../utils/quota';
 import { loadConsent, revokeConsent, isConsentValid, type Consent } from '../utils/consent';
 import { loadResults, clearResults } from '../utils/resultStore';
@@ -107,12 +108,6 @@ export default function SettingsScreen() {
     }
   }
 
-  // Alert.alert ist in react-native-web ein No-Op, deshalb die Weiche.
-  function meldung(titel: string, text: string) {
-    if (Platform.OS === 'web') window.alert(`${titel}\n\n${text}`);
-    else Alert.alert(titel, text);
-  }
-
   async function handleExport(format: 'csv' | 'json') {
     const subs = await loadResults();
     if (subs.length === 0) {
@@ -130,12 +125,13 @@ export default function SettingsScreen() {
     await clearResults();
     await revokeConsent();
     await clearApiKey();
+    await clearSenderInfo();
     setConsent(null);
     router.replace('/');
   }
 
   function confirmDeleteAll() {
-    const text = 'Deine gespeicherten Abos, die Einwilligung und ein hinterlegter API Key werden unwiderruflich von diesem Gerät gelöscht.';
+    const text = 'Deine gespeicherten Abos, die Einwilligung, ein hinterlegter API Key und gespeicherte Absenderdaten fürs Kündigungsschreiben werden unwiderruflich von diesem Gerät gelöscht.';
     if (Platform.OS === 'web') {
       if (window.confirm(`Alle Daten löschen?\n\n${text}`)) deleteAllData();
       return;

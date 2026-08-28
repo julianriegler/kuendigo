@@ -18,6 +18,8 @@ export interface LetterSender {
 export interface LetterInput {
   sender: LetterSender;
   serviceName: string;
+  /** Freitext, mehrzeilig möglich (Straße, PLZ/Ort in eigenen Zeilen). */
+  providerAddress?: string;
   /** Freitext, wie vom Nutzer eingegeben, z.B. „12345". */
   customerNumber?: string;
   /** Freitext im Format TT.MM.JJJJ, wie vom Nutzer eingegeben. */
@@ -45,7 +47,7 @@ function escapeHtml(value: string): string {
 
 /** Baut das Kündigungsschreiben als vollständiges HTML-Dokument (druckfertig, A4). */
 export function buildLetterHtml(input: LetterInput): string {
-  const { sender, serviceName, customerNumber, contractStart, desiredDate } = input;
+  const { sender, serviceName, providerAddress, customerNumber, contractStart, desiredDate } = input;
   const today = input.today ?? new Date();
   const todayDe = formatDateDe(today);
   const ort = sender.city.trim() || 'Ort';
@@ -55,6 +57,10 @@ export function buildLetterHtml(input: LetterInput): string {
   const zipCity = escapeHtml(`${sender.zip.trim()} ${sender.city.trim()}`.trim());
   const email = sender.email?.trim() ? escapeHtml(sender.email.trim()) : '';
   const service = escapeHtml(serviceName.trim());
+
+  const providerAddressHtml = providerAddress?.trim()
+    ? providerAddress.trim().split('\n').map(line => escapeHtml(line.trim())).join('<br />')
+    : '<span style="color:#999;font-style:italic;">[Anschrift des Anbieters eintragen]</span>';
 
   const bezugszeile = [
     customerNumber?.trim() ? `Kundennummer: ${escapeHtml(customerNumber.trim())}` : '',
@@ -103,7 +109,7 @@ export function buildLetterHtml(input: LetterInput): string {
   <div class="empfaenger">
     An<br />
     ${service}<br />
-    Kundenservice
+    ${providerAddressHtml}
   </div>
 
   <div class="ort-datum">${escapeHtml(ort)}, den ${todayDe}</div>

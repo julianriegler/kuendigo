@@ -103,3 +103,8 @@ export async function saveSenderInfo(info: SenderInfo): Promise<void> {
   cachedSenderInfo = info;
   await writeValue(SENDER_INFO_STORAGE_KEY, JSON.stringify(info));
 }
+
+export async function clearSenderInfo(): Promise<void> {
+  cachedSenderInfo = null;
+  await deleteValue(SENDER_INFO_STORAGE_KEY);
+}

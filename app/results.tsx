@@ -17,6 +17,7 @@ import {
 } from '../utils/resultStore';
 import { buildLetterHtml } from '../utils/cancellationLetter';
 import { loadSenderInfo, saveSenderInfo, type SenderInfo } from '../utils/storage';
+import { meldung } from '../utils/meldung';
 
 function formatEur(amount: number) {
   return `€${amount.toFixed(2).replace('.', ',')}`;
@@ -74,12 +75,6 @@ async function openUrl(url: string) {
     const ok = await Linking.canOpenURL(url);
     if (ok) Linking.openURL(url);
   }
-}
-
-// Alert.alert ist in react-native-web ein No-Op, deshalb die Weiche.
-function meldung(titel: string, text: string) {
-  if (Platform.OS === 'web') window.alert(`${titel}\n\n${text}`);
-  else Alert.alert(titel, text);
 }
 
 // ─── Cancellation Modal ───────────────────────────────────────────────────────
@@ -264,12 +259,16 @@ function CancellationModal({
 
 // ─── Letter Form Modal ────────────────────────────────────────────────────────
 
+// TT.MM.JJJJ, wie in den Platzhaltern der Datumsfelder vorgegeben.
+const GERMAN_DATE_RE = /^\d{2}\.\d{2}\.\d{4}$/;
+
 function LetterFormModal({ sub, onClose }: { sub: Subscription; onClose: () => void }) {
   const [name, setName] = useState('');
   const [street, setStreet] = useState('');
   const [zip, setZip] = useState('');
   const [city, setCity] = useState('');
   const [email, setEmail] = useState('');
+  const [providerAddress, setProviderAddress] = useState('');
   const [customerNumber, setCustomerNumber] = useState('');
   const [contractStart, setContractStart] = useState('');
   const [desiredDate, setDesiredDate] = useState('');
@@ -289,12 +288,7 @@ function LetterFormModal({ sub, onClose }: { sub: Subscription; onClose: () => v
     return () => { alive = false; };
   }, []);
 
-  function printOnWeb(html: string) {
-    const win = window.open('', '_blank');
-    if (!win) {
-      meldung('Fenster blockiert', 'Bitte Pop-ups für Kündigo erlauben und erneut versuchen.');
-      return;
-    }
+  function printOnWeb(win: Window, html: string) {
     win.document.open();
     win.document.write(html);
     win.document.close();
@@ -306,6 +300,23 @@ function LetterFormModal({ sub, onClose }: { sub: Subscription; onClose: () => v
   async function createLetter() {
     if (!name.trim() || !street.trim() || !zip.trim() || !city.trim()) {
       meldung('Angaben fehlen', 'Bitte Name, Straße, PLZ und Ort ausfüllen.');
+      return;
+    }
+    if (contractStart.trim() && !GERMAN_DATE_RE.test(contractStart.trim())) {
+      meldung('Datum prüfen', 'Vertragsbeginn bitte im Format TT.MM.JJJJ eingeben, z.B. 01.03.2022.');
+      return;
+    }
+    if (desiredDate.trim() && !GERMAN_DATE_RE.test(desiredDate.trim())) {
+      meldung('Datum prüfen', 'Wunschtermin bitte im Format TT.MM.JJJJ eingeben, z.B. 31.12.2026.');
+      return;
+    }
+
+    // Fenster synchron öffnen, noch vor jedem await: Safari verwirft die
+    // Nutzeraktivierung des Klicks, sobald ein await dazwischenliegt, und
+    // blockt das Popup dann als "nicht vom Nutzer ausgelöst".
+    const win = Platform.OS === 'web' ? window.open('', '_blank') : null;
+    if (Platform.OS === 'web' && !win) {
+      meldung('Fenster blockiert', 'Bitte Pop-ups für Kündigo erlauben und erneut versuchen.');
       return;
     }
 
@@ -321,13 +332,14 @@ function LetterFormModal({ sub, onClose }: { sub: Subscription; onClose: () => v
     const html = buildLetterHtml({
       sender,
       serviceName: sub.name,
+      providerAddress: providerAddress.trim() || undefined,
       customerNumber: customerNumber.trim() || undefined,
       contractStart: contractStart.trim() || undefined,
       desiredDate: desiredDate.trim() || undefined,
     });
 
-    if (Platform.OS === 'web') {
-      printOnWeb(html);
+    if (win) {
+      printOnWeb(win, html);
       onClose();
       return;
     }
@@ -431,6 +443,18 @@ function LetterFormModal({ sub, onClose }: { sub: Subscription; onClose: () => v
 
             <Text style={ms.formSectionLabel}>Zum Vertrag (optional)</Text>
 
+            <Text style={ms.fieldLabel}>Anschrift des Anbieters</Text>
+            <TextInput
+              style={[ms.input, ms.inputMultiline]}
+              value={providerAddress}
+              onChangeText={setProviderAddress}
+              placeholder={`${sub.name} GmbH\nMusterstraße 1\n12345 Musterstadt`}
+              placeholderTextColor={colors.textTertiary}
+              multiline
+              numberOfLines={3}
+              accessibilityLabel="Anschrift des Anbieters, optional, mehrzeilig"
+            />
+
             <Text style={ms.fieldLabel}>Kundennummer</Text>
             <TextInput
               style={ms.input}
@@ -462,13 +486,13 @@ function LetterFormModal({ sub, onClose }: { sub: Subscription; onClose: () => v
             />
 
             <TouchableOpacity
-              style={ms.primaryBtn}
+              style={ms.letterSubmitBtn}
               onPress={createLetter}
               activeOpacity={0.8}
               accessibilityRole="button"
               accessibilityLabel="Kündigungsschreiben erstellen"
             >
-              <Text style={ms.primaryBtnText}>📄 Schreiben erstellen</Text>
+              <Text style={ms.letterSubmitBtnText}>📄 Schreiben erstellen</Text>
             </TouchableOpacity>
           </ScrollView>
         </View>
@@ -1135,6 +1159,19 @@ const ms = StyleSheet.create({
     borderWidth: 1, borderColor: colors.border,
     color: colors.textPrimary, fontSize: 15,
     paddingHorizontal: 14, paddingVertical: 12,
+  },
+  inputMultiline: {
+    minHeight: 72, textAlignVertical: 'top',
+  },
+  letterSubmitBtn: {
+    backgroundColor: colors.accent,
+    borderRadius: 14, paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  letterSubmitBtnText: {
+    fontSize: 16, fontWeight: '700',
+    color: colors.bg, letterSpacing: 0.2,
   },
 });
 
