@@ -1,10 +1,10 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { colors } from '../constants/theme';
-import { getApiKey } from '../utils/storage';
+import { getApiKey, loadOnboarded } from '../utils/storage';
 import { monthlyAmount } from '../utils/analyzeSubscriptions';
 import { loadResults } from '../utils/resultStore';
 import { fetchQuota, getCachedQuota, quotaAvailable, type Quota } from '../utils/quota';
@@ -21,6 +21,15 @@ export default function WelcomeScreen() {
   const [savedCount, setSavedCount] = useState(0);
   const [savedMonthly, setSavedMonthly] = useState(0);
   const [quota, setQuota] = useState<Quota | null>(getCachedQuota());
+
+  // Nur beim allerersten Start: Onboarding zeigen, danach nie wieder
+  // (Flag kuendigo_onboarded). Aus den Einstellungen bleibt es aufrufbar.
+  useEffect(() => {
+    (async () => {
+      const onboarded = await loadOnboarded();
+      if (!onboarded) router.replace('/onboarding');
+    })();
+  }, []);
 
   // Gespeicherte Abos bei jedem Fokus neu laden (z. B. nach dem Löschen)
   useFocusEffect(

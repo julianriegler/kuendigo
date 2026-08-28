@@ -13,7 +13,7 @@ import { getCancellationGuide, cancelDeadline, type CancelDeadline } from '../ut
 import { cancelledSavings } from '../utils/subscriptionMath';
 import {
   loadResults, setResults, upsertSubscription, removeSubscription,
-  normalizeList, lastPersistFailed, hasStoredResults,
+  normalizeList, lastPersistFailed, hasStoredResults, clearDemoSubscriptions,
 } from '../utils/resultStore';
 import { buildLetterHtml } from '../utils/cancellationLetter';
 import { loadSenderInfo, saveSenderInfo, type SenderInfo } from '../utils/storage';
@@ -659,6 +659,9 @@ export default function ResultsScreen() {
   }
 
   const cancelledIds = new Set(subscriptions.filter(s => s.cancelled).map(s => s.id));
+  // Persistierte Beispieldaten aus dem Onboarding, unabhängig von der
+  // ephemeren Vorschau oben (isDemo).
+  const hasDemoFlag = subscriptions.some(s => s.demo);
 
   // Bilanz aus allen als gekündigt markierten Abos. Die Markierung liegt im
   // Speicher, die Summe überlebt damit jedes Neuladen.
@@ -720,6 +723,13 @@ export default function ResultsScreen() {
     const next = await removeSubscription(sub.id);
     setSubscriptions(next);
     setStorageWarning(lastPersistFailed());
+  }
+
+  /** Räumt die aus dem Onboarding gespeicherten Beispieldaten auf und führt in den echten Upload-Weg. */
+  async function findRealSubscriptions() {
+    const next = await clearDemoSubscriptions();
+    setSubscriptions(next);
+    router.push('/upload');
   }
 
   async function shareResults() {
@@ -804,6 +814,22 @@ export default function ResultsScreen() {
             <Text style={styles.noticeText}>
               👀 Beispieldaten. Deine Liste wird gespeichert, sobald du eine echte Analyse startest oder hier etwas änderst.
             </Text>
+          </View>
+        )}
+        {hasDemoFlag && (
+          <View style={styles.demoBanner}>
+            <Text style={styles.demoBannerText}>
+              👀 Das sind Beispieldaten aus dem Onboarding, keine echte Analyse.
+            </Text>
+            <TouchableOpacity
+              style={styles.demoBannerBtn}
+              onPress={findRealSubscriptions}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Beispieldaten entfernen und jetzt meine eigenen Abos finden"
+            >
+              <Text style={styles.demoBannerBtnText}>Jetzt meine Abos finden →</Text>
+            </TouchableOpacity>
           </View>
         )}
         {storageWarning && (
@@ -1347,6 +1373,17 @@ const styles = StyleSheet.create({
     backgroundColor: `${colors.danger}12`, borderColor: `${colors.danger}35`,
   },
   noticeText: { fontSize: 13, color: colors.textSecondary, lineHeight: 19 },
+
+  demoBanner: {
+    backgroundColor: `${colors.accent}12`, borderRadius: 12, padding: 14,
+    marginBottom: 16, borderWidth: 1, borderColor: `${colors.accent}35`, gap: 12,
+  },
+  demoBannerText: { fontSize: 13, color: colors.textPrimary, lineHeight: 19, fontWeight: '600' },
+  demoBannerBtn: {
+    backgroundColor: colors.accent, borderRadius: 10, minHeight: 44,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  demoBannerBtnText: { fontSize: 14, fontWeight: '700', color: colors.bg },
 
   loadingWrap: {
     flex: 1, backgroundColor: colors.bg,

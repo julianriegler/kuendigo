@@ -19,9 +19,9 @@ export interface ReminderPlan {
 
 /**
  * Welche Abos bekommen eine Erinnerung X Tage vor nextCharge, um reminderHour
- * Uhr? Gekündigte Abos, Abos ohne (gültigen) Termin und Erinnerungstage, die
- * komplett in der Vergangenheit liegen, werden übersprungen statt zum
- * Absturz zu führen.
+ * Uhr? Gekündigte Abos, Demo-Abos aus dem Onboarding, Abos ohne (gültigen)
+ * Termin und Erinnerungstage, die komplett in der Vergangenheit liegen,
+ * werden übersprungen statt zum Absturz zu führen.
  *
  * Liegt der berechnete Zeitpunkt (Tag + Uhrzeit) für den dringendsten Termin
  * (die nächste Abbuchung) bereits in der Vergangenheit — z.B. weil nextCharge
@@ -42,6 +42,7 @@ export function computeReminderPlans(
 
   for (const sub of subs) {
     if (sub.cancelled) continue;
+    if (sub.demo) continue; // Beispieldaten aus dem Onboarding: keine Erinnerungen
     if (!sub.nextCharge) continue;
     const charge = new Date(`${sub.nextCharge}T00:00:00`);
     if (Number.isNaN(charge.getTime())) continue;

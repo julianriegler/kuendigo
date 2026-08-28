@@ -12,11 +12,13 @@ const API_KEY_STORAGE_KEY = 'kuendigo_api_key';
 const DEVICE_TOKEN_STORAGE_KEY = 'kuendigo_device_v1';
 const SENDER_INFO_STORAGE_KEY = 'kuendigo_sender_info_v1';
 const REMINDER_SETTINGS_STORAGE_KEY = 'kuendigo_reminder_settings_v1';
+const ONBOARDED_STORAGE_KEY = 'kuendigo_onboarded';
 
 let cachedKey = '';
 let cachedDeviceToken = '';
 let cachedSenderInfo: SenderInfo | null = null;
 let cachedReminderSettings: ReminderSettings | null = null;
+let cachedOnboarded = false;
 
 // ─── API Key ─────────────────────────────────────────────────────────────────
 
@@ -145,4 +147,19 @@ export async function loadReminderSettings(): Promise<ReminderSettings> {
 export async function saveReminderSettings(settings: ReminderSettings): Promise<void> {
   cachedReminderSettings = sanitizeReminderSettings(settings);
   await writeValue(REMINDER_SETTINGS_STORAGE_KEY, JSON.stringify(cachedReminderSettings));
+}
+
+// ─── Onboarding ──────────────────────────────────────────────────────────────
+
+/** Wurde das Onboarding schon einmal abgeschlossen (Flag kuendigo_onboarded)? */
+export async function loadOnboarded(): Promise<boolean> {
+  if (cachedOnboarded) return true;
+  cachedOnboarded = (await readValue(ONBOARDED_STORAGE_KEY)) === '1';
+  return cachedOnboarded;
+}
+
+/** Markiert das Onboarding als abgeschlossen. Aus den Einstellungen bleibt es trotzdem erneut aufrufbar. */
+export async function setOnboarded(): Promise<void> {
+  cachedOnboarded = true;
+  await writeValue(ONBOARDED_STORAGE_KEY, '1');
 }

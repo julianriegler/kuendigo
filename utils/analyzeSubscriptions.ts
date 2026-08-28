@@ -12,6 +12,7 @@ export interface Subscription {
   nextCharge: string;
   cancelled?: boolean;  // vom Nutzer als gekündigt markiert (persistiert)
   cancelledAt?: string; // YYYY-MM-DD, wann markiert wurde
+  demo?: boolean;       // Beispieldaten aus dem Onboarding, keine echte Analyse
 }
 
 // ─── Prompts ────────────────────────────────────────────────────────────────
@@ -286,16 +287,19 @@ export type { Savings } from './subscriptionMath';
 
 // ─── Demo data ───────────────────────────────────────────────────────────────
 
+// Realistisch deutsche Auswahl fürs Sofort-Beispiel im Onboarding: bekannte
+// Streaming-/Musik-Dienste plus die typischen "vergessenen" Abo-Arten
+// (Fitnessstudio, Cloud-Speicher, ein Zeitungsabo, das schon lange nicht
+// mehr genutzt wird). `demo` wird hier bewusst NICHT gesetzt: dieselbe Liste
+// dient auch der bestehenden Vorschau in results.tsx, die beim ersten Eingriff
+// des Nutzers zu echten Daten wird (siehe dortiger Hinweistext). Das Onboarding
+// markiert seine eigene Kopie explizit mit demo: true (app/onboarding.tsx).
 export const DEMO_SUBSCRIPTIONS: Subscription[] = [
-  { id: '1', name: 'Netflix',         amount: 13.99, frequency: 'monthly',   category: 'streaming', lastCharged: '2026-07-15', nextCharge: '2026-08-15' },
-  { id: '2', name: 'Spotify',         amount: 9.99,  frequency: 'monthly',   category: 'music',     lastCharged: '2026-07-20', nextCharge: '2026-08-20' },
-  { id: '3', name: 'Adobe Creative',  amount: 54.99, frequency: 'monthly',   category: 'software',  lastCharged: '2026-07-01', nextCharge: '2026-08-01' },
-  { id: '4', name: 'Apple iCloud',    amount: 0.99,  frequency: 'monthly',   category: 'cloud',     lastCharged: '2026-07-25', nextCharge: '2026-08-25' },
-  { id: '5', name: 'Amazon Prime',    amount: 8.99,  frequency: 'monthly',   category: 'streaming', lastCharged: '2026-07-10', nextCharge: '2026-08-10' },
-  { id: '6', name: 'Xbox Game Pass',  amount: 14.99, frequency: 'monthly',   category: 'gaming',    lastCharged: '2026-07-05', nextCharge: '2026-08-05' },
-  { id: '7', name: 'LinkedIn Premium',amount: 39.99, frequency: 'monthly',   category: 'software',  lastCharged: '2026-07-18', nextCharge: '2026-08-18' },
-  { id: '8', name: 'Headspace',       amount: 12.99, frequency: 'monthly',   category: 'fitness',   lastCharged: '2026-07-22', nextCharge: '2026-08-22' },
-  { id: '9', name: 'NY Times',        amount: 1.67,  frequency: 'monthly',   category: 'news',      lastCharged: '2026-07-12', nextCharge: '2026-08-12' },
+  { id: '1', name: 'Netflix',           amount: 13.99, frequency: 'monthly', category: 'streaming', lastCharged: '2026-07-15', nextCharge: '2026-08-15' },
+  { id: '2', name: 'Spotify',           amount: 9.99,  frequency: 'monthly', category: 'music',     lastCharged: '2026-07-20', nextCharge: '2026-08-20' },
+  { id: '3', name: 'FitX Fitnessstudio',amount: 24.90, frequency: 'monthly', category: 'fitness',   lastCharged: '2026-07-03', nextCharge: '2026-08-03' },
+  { id: '4', name: 'Google One Cloud-Speicher', amount: 2.99, frequency: 'monthly', category: 'cloud', lastCharged: '2026-07-27', nextCharge: '2026-08-27' },
+  { id: '5', name: 'Tageszeitung Digital (vergessen)', amount: 19.99, frequency: 'monthly', category: 'news', lastCharged: '2026-02-11', nextCharge: '2026-08-11' },
 ];
 
 export const POPULAR_SERVICES = [

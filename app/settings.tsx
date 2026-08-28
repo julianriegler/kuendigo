@@ -118,7 +118,10 @@ export default function SettingsScreen() {
   }
 
   async function handleExport(format: 'csv' | 'json') {
-    const subs = await loadResults();
+    // Beispieldaten aus dem Onboarding gehören nicht in den Export der
+    // echten Abos (weniger Code als eine eigene Demo-Kennzeichnung in
+    // exportData.ts: Filter am einzigen Aufrufer statt in beiden Formaten).
+    const subs = (await loadResults()).filter(s => !s.demo);
     if (subs.length === 0) {
       meldung('Keine Daten', 'Es sind noch keine Abos gespeichert.');
       return;
@@ -390,6 +393,21 @@ export default function SettingsScreen() {
             )}
           </>
         )}
+      </View>
+
+      {/* Hilfe */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>❓ Hilfe</Text>
+        <TouchableOpacity
+          style={styles.legalRow}
+          onPress={() => router.push('/onboarding')}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Einführung erneut ansehen"
+        >
+          <Text style={styles.legalRowText}>Einführung erneut ansehen</Text>
+          <Text style={styles.legalRowArrow}>→</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Rechtliches */}

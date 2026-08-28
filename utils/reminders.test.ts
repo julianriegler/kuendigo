@@ -61,6 +61,12 @@ const gekuendigt = sub({ id: 'f', name: 'Gekündigt', nextCharge: '2026-08-20', 
 const plansGekuendigt = computeReminderPlans([gekuendigt], 3, heute, 9);
 check('Gekündigtes Abo bekommt keine Erinnerung', plansGekuendigt.length === 0, plansGekuendigt);
 
+// ─── Demo-Abos aus dem Onboarding bekommen keine Erinnerung ───────────────
+
+const demoAbo = sub({ id: 'demo1', name: 'Demo-Netflix', nextCharge: '2026-08-20', demo: true });
+const plansDemo = computeReminderPlans([demoAbo], 3, heute, 9);
+check('Demo-Abo bekommt keine Erinnerung', plansDemo.length === 0, plansDemo);
+
 // ─── Mehrere Abos ergeben die richtige Anzahl ─────────────────────────────
 
 const mix = computeReminderPlans([netflix, vergangen, ohneTermin, gekuendigt, heuteGenau], 3, heute, 9);

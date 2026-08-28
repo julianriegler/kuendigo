@@ -84,6 +84,7 @@ function sanitize(raw: any): Subscription | null {
   if (sub.cancelled && typeof raw.cancelledAt === 'string' && raw.cancelledAt) {
     sub.cancelledAt = raw.cancelledAt;
   }
+  if (raw.demo === true) sub.demo = true;
   sub.id = stableId(sub);
   return sub;
 }
@@ -109,6 +110,9 @@ function mergeLists(existing: Subscription[], incoming: Subscription[]): Subscri
           ...old, ...sub, id: old.id, name: old.name,
           cancelled: sub.cancelled || old.cancelled,
           cancelledAt: sub.cancelledAt ?? old.cancelledAt,
+          // Trifft eine echte Analyse auf zuvor gespeicherte Demo-Daten
+          // (gleicher Name + Betrag), zählt das Abo ab hier als echt.
+          demo: sub.demo === true && old.demo === true,
         })!
       : sub);
   }
@@ -219,4 +223,10 @@ export async function removeSubscription(id: string): Promise<Subscription[]> {
 /** Löscht alle gespeicherten Abos. */
 export async function clearResults(): Promise<Subscription[]> {
   return persist([]);
+}
+
+/** Entfernt nur die als Demo markierten Abos, echte Daten bleiben stehen. */
+export async function clearDemoSubscriptions(): Promise<Subscription[]> {
+  if (!hydrated) await loadResults();
+  return persist(cache.filter(s => !s.demo));
 }
