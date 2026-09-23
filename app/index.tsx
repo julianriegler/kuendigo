@@ -8,6 +8,8 @@ import { getApiKey, loadOnboarded } from '../utils/storage';
 import { monthlyAmount } from '../utils/analyzeSubscriptions';
 import { loadResults } from '../utils/resultStore';
 import { fetchQuota, getCachedQuota, quotaAvailable, type Quota } from '../utils/quota';
+import { zaehle } from '../utils/messung';
+import BetaHinweis from '../components/BetaHinweis';
 
 function formatEur(amount: number) {
   return `€${amount.toFixed(2).replace('.', ',')}`;
@@ -151,13 +153,19 @@ export default function WelcomeScreen() {
       {/* CTA */}
       <TouchableOpacity
         style={styles.ctaButton}
-        onPress={() => router.push('/upload')}
+        onPress={() => {
+          zaehle('analyse_start');
+          router.push('/upload');
+        }}
         activeOpacity={0.85}
         accessibilityRole="button"
         accessibilityLabel="Jetzt analysieren"
       >
         <Text style={styles.ctaText}>Jetzt analysieren →</Text>
       </TouchableOpacity>
+
+      {/* Ehrliche Beta-Ansprache mit Teilen und Feedback (Julian, 23.9.) */}
+      <BetaHinweis />
 
       {/* Datenschutzhinweis: die Analyse überträgt Inhalte, das muss hier stehen */}
       <Text style={styles.privacyNote}>

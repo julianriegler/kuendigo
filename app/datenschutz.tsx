@@ -107,6 +107,25 @@ export default function DatenschutzScreen() {
           wird weder deine IP-Adresse noch eine sonstige Kennung gespeichert, und es werden keine
           Cookies gesetzt.
         </P>
+        <P>
+          Denselben Zähler ruft die App auf, wenn du eine der Hauptfunktionen startest (etwa eine
+          Analyse oder das Teilen). Gespeichert wird nur, welche Funktion an welchem Tag wie oft
+          genutzt wurde, über alle Nutzer zusammen. Ein Rückschluss auf dich ist damit nicht
+          möglich. Wir nutzen diese Zahlen, um zu sehen, welche Funktionen gebraucht werden.
+        </P>
+      </Section>
+
+      <Section heading="5b. Feedback">
+        <P>
+          Über das Feedback-Feld auf der Startseite kannst du uns schreiben. Gespeichert werden
+          dein Text, der App-Name und der Zeitpunkt sowie, nur wenn du sie freiwillig einträgst,
+          deine Kontaktangabe für Rückfragen. Deine IP-Adresse wird nicht gespeichert. Text und
+          Kontaktangabe bleiben auf unserem Server; wir bekommen nur eine Benachrichtigung, dass
+          Feedback eingegangen ist, ohne Inhalt. Rechtsgrundlage ist unser berechtigtes Interesse,
+          die App zu verbessern (Art. 6 Abs. 1 lit. f DSGVO), bei einer Kontaktangabe deine
+          Einwilligung (Art. 6 Abs. 1 lit. a DSGVO). Wir löschen Feedback automatisch zwölf Monate
+          nach Eingang, auf Wunsch früher.
+        </P>
       </Section>
 
       <Section heading="6. Server-Protokolle">
