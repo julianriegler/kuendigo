@@ -143,12 +143,19 @@ try {
   // 9) Rechtsseiten: direkt aufrufbar und aus dem Fuß verlinkt
   await open('/impressum');
   await page.getByText('Impressum').first().waitFor({ timeout: 30000 });
+  // Betreiberin ist eine zyprische Gesellschaft, deshalb wird auf die EU-Richtlinie
+  // 2000/31/EG verwiesen und nicht auf das österreichische ECG oder das MedienG.
   check('Impressum ist direkt aufrufbar',
-    await page.getByText(/§ 5 E-Commerce-Gesetz/).count() > 0);
+    await page.getByText(/Richtlinie 2000\/31\/EG/).count() > 0);
   check('Impressum nennt die Pflichtangaben',
     (await page.getByText(/Unternehmensgegenstand/).count()) > 0
-    && (await page.getByText(/UID-Nummer/).count()) > 0
-    && (await page.getByText(/Blattlinie/).count()) > 0);
+    && (await page.getByText(/Registrar of Companies, Republik Zypern, Nr\. HE 482984/).count()) > 0
+    && (await page.getByText(/Julian Riegler \(Direktor\)/).count()) > 0
+    && (await page.getByText(/Herkunftslandprinzip/).count()) > 0
+    && (await page.getByText(/CY60253218Q/).count()) > 0);
+  // Ein sichtbarer Platzhalterkasten in den Rechtstexten darf nie live gehen.
+  check('Impressum ohne Platzhalterhinweis',
+    (await page.getByText(/Vor der Veröffentlichung ausfüllen|Vor dem Livegang|\[[^\]]+\]|example\./).count()) === 0);
 
   await open('/datenschutz');
   await page.getByText('1. Verantwortlicher').waitFor({ timeout: 30000 });
@@ -157,7 +164,9 @@ try {
   check('Datenschutz nennt Drittland, Rechtsgrundlagen und Behörde',
     (await page.getByText(/Drittlandtransfer in die USA/).count()) > 0
     && (await page.getByText(/Art. 6 Abs. 1 lit. b DSGVO/).count()) > 0
-    && (await page.getByText(/Österreichische Datenschutzbehörde/).count()) > 0);
+    && (await page.getByText(/Commissioner for Personal Data Protection, Republik Zypern/).count()) > 0);
+  check('Datenschutz ohne Platzhalterhinweis',
+    (await page.getByText(/Vor der Veröffentlichung ausfüllen|Vor dem Livegang|\[[^\]]+\]|example\./).count()) === 0);
 
   await open('/');
   await page.getByText('Jetzt analysieren →').waitFor({ timeout: 30000 });

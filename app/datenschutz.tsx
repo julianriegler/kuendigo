@@ -1,5 +1,5 @@
 import {
-  LegalPage, Section, P, Bullet, Field, PlaceholderNote, ExternalLink, InternalLink,
+  LegalPage, Section, P, Bullet, Field, ExternalLink, InternalLink,
 } from '../components/LegalPage';
 
 /**
@@ -12,18 +12,13 @@ export default function DatenschutzScreen() {
     <LegalPage
       title="Datenschutzerklärung"
       subtitle="Was Kündigo mit deinen Daten macht, an wen etwas übermittelt wird und welche Rechte du hast."
-      updatedAt="August 2026"
+      updatedAt="Oktober 2026"
     >
-      <PlaceholderNote>
-        ⚠️ Vor der Veröffentlichung ausfüllen: Verantwortlicher, Kontakt und der Stand der
-        Auftragsverarbeitungsverträge (Anthropic, Vercel, Upstash) sind Platzhalter.
-      </PlaceholderNote>
-
       <Section heading="1. Verantwortlicher">
         <Field label="Name" value="JR COACHING & CONSULTING LTD" />
         <Field label="Register" value="Registrar of Companies, Republik Zypern, Nr. HE 482984" />
-        <Field label="Anschrift" value="Karatza 32, 3020 Limassol, Zypern" /> {/* RECHT_ANSCHRIFT */}
-        <Field label="E-Mail" value="kontakt@klickmill.app" /> {/* RECHT_EMAIL */}
+        <Field label="Anschrift" value="Karatza 32, 3020 Limassol, Zypern" />
+        <Field label="E-Mail" value="kontakt@klickmill.app" />
         <P>
           Ein Datenschutzbeauftragter ist nicht bestellt, weil die Voraussetzungen nach Art. 37 DSGVO
           nicht vorliegen. Die vollständigen Angaben stehen im Impressum.
@@ -63,7 +58,7 @@ export default function DatenschutzScreen() {
         </P>
         <Bullet>Empfänger: Anthropic PBC, 548 Market St, San Francisco, CA 94104, USA, als Auftragsverarbeiter nach Art. 28 DSGVO.</Bullet>
         <Bullet>Hosting der Funktion und Auslieferung der Web-App: Vercel Inc., USA.</Bullet>
-        <Bullet>Zähler für das Freikontingent: Upstash (Redis), Serverstandort [Region eintragen].</Bullet>
+        <Bullet>Zähler für das Freikontingent: Upstash (Redis).</Bullet>
         <P>
           Hinterlegst du deinen eigenen Anthropic API Key, wird die Analyse deinem Anthropic-Konto
           zugerechnet und nicht auf das Freikontingent angerechnet. In der App auf iPhone und Android
@@ -84,11 +79,16 @@ export default function DatenschutzScreen() {
           in jedem Fall vollständig durchsetzen. Wenn du das nicht möchtest, lade keine Kontoauszüge
           oder Screenshots hoch und trage deine Abos stattdessen manuell ein.
         </P>
-        <PlaceholderNote>
-          ⚠️ Vor dem Livegang: Auftragsverarbeitungsverträge mit Anthropic, Vercel und Upstash
-          abschließen und hier die tatsächlich gewählte Grundlage (Standardvertragsklauseln oder
-          Data Privacy Framework) je Anbieter eintragen.
-        </PlaceholderNote>
+        <P>
+          Grundlage der Auftragsverarbeitung sind die Datenverarbeitungsvereinbarungen der
+          Anbieter. Bei Anthropic ist das Data Processing Addendum durch Verweis Bestandteil der
+          Nutzungsbedingungen und gilt mit deren Annahme, bei Upstash gilt das dort veröffentlichte
+          Data Processing Addendum. Vercel, der Hosting-Anbieter der Web-App und der
+          Analysefunktion, veröffentlicht ebenfalls ein Data Processing Addendum.
+        </P>
+        <ExternalLink label="Anthropic Data Processing Addendum" url="https://www.anthropic.com/legal/data-processing-addendum" />
+        <ExternalLink label="Vercel Data Processing Addendum" url="https://vercel.com/legal/dpa" />
+        <ExternalLink label="Upstash Data Processing Addendum" url="https://upstash.com/trust/dpa.pdf" />
       </Section>
 
       <Section heading="5. Freikontingent und Missbrauchsschutz">
@@ -186,7 +186,7 @@ export default function DatenschutzScreen() {
         <P>
           Weil die Abo-Daten nur auf deinem Gerät liegen, kannst du Auskunft, Berichtigung und
           Löschung dort unmittelbar selbst ausüben. Für alles Weitere schreib uns an
-          [datenschutz@example.at].
+          kontakt@klickmill.app.
         </P>
       </Section>
 
