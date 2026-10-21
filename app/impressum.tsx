@@ -1,26 +1,42 @@
 import {
-  LegalPage, Section, P, Bullet, Field, ExternalLink, InternalLink,
+  LegalPage, Section, P, Bullet, Field, InternalLink,
 } from '../components/LegalPage';
 
 /**
- * Anbieterkennzeichnung für JR Coaching & Consulting Ltd.
- * Anschrift und E-Mail werden noch nachgetragen (siehe Marker RECHT_ANSCHRIFT
- * und RECHT_EMAIL).
+ * Anbieterkennzeichnung für JR Coaching & Consulting Ltd, eine Gesellschaft nach
+ * zyprischem Recht. Deshalb wird auf die EU-Richtlinie 2000/31/EG verwiesen und nicht
+ * auf das österreichische ECG oder das deutsche DDG.
+ * Anschrift, E-Mail und UID sind am 1.9.2026 von Julian bestätigt worden.
  */
 export default function ImpressumScreen() {
   return (
     <LegalPage
       title="Impressum"
       subtitle="Anbieterkennzeichnung"
-      updatedAt="August 2026"
+      updatedAt="Oktober 2026"
     >
       <Section heading="Betreiber">
         <Field label="Name" value="JR COACHING & CONSULTING LTD" />
         <Field label="Vertreten durch" value="Julian Riegler (Direktor)" />
         <Field label="Registereintrag" value="Registrar of Companies, Republik Zypern, Nr. HE 482984" />
-        <Field label="Anschrift" value="Karatza 32, 3020 Limassol" /> {/* RECHT_ANSCHRIFT */}
+        <Field label="Anschrift" value="Karatza 32, 3020 Limassol" />
         <Field label="Land" value="Zypern" />
-        <Field label="E-Mail" value="kontakt@klickmill.app" /> {/* RECHT_EMAIL */}
+        <Field label="E-Mail" value="kontakt@klickmill.app" />
+        <Field label="UID-Nummer" value="CY60253218Q" />
+      </Section>
+
+      <Section heading="Pflichtangaben">
+        <P>
+          Diese Anbieterkennzeichnung erfolgt nach Artikel 5 der Richtlinie 2000/31/EG über den
+          elektronischen Geschäftsverkehr, umgesetzt im Sitzstaat der Gesellschaft, der Republik
+          Zypern. Nach dem Herkunftslandprinzip gilt für die Angaben zyprisches Recht, auch wenn
+          die App in Deutschland und Österreich genutzt wird.
+        </P>
+        <P>
+          Umsatzsteuer-Identifikationsnummer der Gesellschaft: CY60253218Q. Eine
+          Kammerzugehörigkeit oder Aufsichtsbehörde für die Tätigkeit besteht nicht, es handelt
+          sich um keinen reglementierten Beruf.
+        </P>
       </Section>
 
       <Section heading="Unternehmensgegenstand">
@@ -30,13 +46,11 @@ export default function ImpressumScreen() {
         </P>
       </Section>
 
-      <Section heading="Online-Streitbeilegung">
+      <Section heading="Verbraucherstreitbeilegung">
         <P>
-          Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung bereit.
           Wir sind weder verpflichtet noch bereit, an einem Streitbeilegungsverfahren vor einer
           Verbraucherschlichtungsstelle teilzunehmen.
         </P>
-        <ExternalLink label="ec.europa.eu/consumers/odr" url="https://ec.europa.eu/consumers/odr" />
       </Section>
 
       <Section heading="Haftung für Inhalte und Links">
