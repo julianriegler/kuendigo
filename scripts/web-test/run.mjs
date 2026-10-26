@@ -83,6 +83,8 @@ try {
     await page.getByText(/Frist unbekannt, am besten gleich kündigen/).count() > 0);
   check('Beispieldaten werden nicht gespeichert', (await storedNames()) === null);
   check('Hinweis auf Beispieldaten sichtbar', await page.getByText(/Beispieldaten/).count() > 0);
+  check('mit Kontingent verspricht der Beispiel-Hinweis die Analyse',
+    await page.getByText(/eine echte Analyse startest/).count() > 0);
 
   // 3) Abo löschen: dabei wird die Liste dauerhaft übernommen
   const victim = (await deleteButtons().first().getAttribute('aria-label'))?.replace(' entfernen', '');
@@ -401,6 +403,12 @@ try {
   // Demo-Knopf zählt: Beispiel aus dem Onboarding, dann weiter zur echten Analyse
   const p3 = await newPage();
   await p3.route('**/api/analyze', route => route.fulfill({ json: { limit: 0, used: 0, remaining: 0, reason: 'aus' } }));
+  // Leerer Speicher: die Ergebnisliste zeigt die Vorschau mit Hinweis, gespeichert wird nichts
+  await p3.goto(base + '/results', { waitUntil: 'networkidle' });
+  await p3.getByText(/Beispieldaten\. Deine Liste/).waitFor({ timeout: 30000 });
+  check('limit 0: Beispiel-Hinweis nennt das Eintragen statt der Analyse',
+    await p3.getByText(/ein eigenes Abo einträgst/).count() > 0
+    && await p3.getByText(/eine echte Analyse startest/).count() === 0);
   await p3.goto(base + '/onboarding', { waitUntil: 'networkidle' });
   const onboardingText = await p3.locator('body').innerText();
   check('limit 0: Onboarding verspricht kein automatisches Finden',
@@ -410,9 +418,9 @@ try {
   check('Onboarding nennt Problem, Lösung und ersten Schritt',
     /Das Problem/.test(onboardingText) && /Die Lösung/.test(onboardingText) && /So fängst du an/.test(onboardingText));
   await p3.getByText('Beispiel ansehen').first().click();
-  check('limit 0: Beispiel verspricht keine Analyse',
-    await p3.getByText('Jetzt meine Abos finden →').count() === 0
-    && await p3.getByText(/eine echte Analyse startest/).count() === 0);
+  await p3.getByText('Jetzt meine Abos eintragen →').waitFor({ timeout: 15000 });
+  check('limit 0: Beispiel-Knopf verspricht keine Analyse',
+    await p3.getByText('Jetzt meine Abos finden →').count() === 0);
   await p3.getByText('Jetzt meine Abos eintragen →').click();
   await p3.getByText(/Betrag/).first().waitFor({ timeout: 15000 });
   check('limit 0: Beispiel führt zum Eintragen', /\/manual/.test(p3.url()), p3.url());
