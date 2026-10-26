@@ -23,12 +23,12 @@ function steps(canAnalyze: boolean) {
       title: 'Die Lösung',
       text: canAnalyze
         ? 'Lade deinen Kontoauszug hoch. Kündigo findet deine Abos und zeigt, was sie im Jahr kosten.'
-        : 'Trag deine Abos ein. Kündigo zeigt dir, was sie im Monat und im Jahr kosten. Das automatische Erkennen aus dem Kontoauszug ist noch nicht freigeschaltet.',
+        : 'Trag deine Abos ein. Kündigo zeigt dir, was sie im Monat und im Jahr kosten. Abos aus dem Kontoauszug einlesen kommt später.',
     },
     {
       icon: '✅',
       title: 'Dann kündigst du',
-      text: 'Du siehst, was bald fällig wird. Kündigo zeigt dir Schritt für Schritt, wie du kündigst.',
+      text: 'Du siehst, was bald fällig wird. Für viele bekannte Dienste zeigt Kündigo dir Schritt für Schritt, wie du kündigst.',
     },
   ];
 }
@@ -121,11 +121,11 @@ export default function OnboardingScreen() {
           onPress={beispielAnsehen}
           activeOpacity={0.85}
           accessibilityRole="button"
-          accessibilityLabel="Beispiel ansehen, zeigt Beispieldaten ohne eigenen API Key"
+          accessibilityLabel="Beispiel ansehen, zeigt eine Liste mit Beispiel-Abos"
         >
           <Text style={styles.ctaText}>Beispiel ansehen →</Text>
         </TouchableOpacity>
-        <Text style={styles.ctaHint}>Ohne Anmeldung, ohne eigenen API Key</Text>
+        <Text style={styles.ctaHint}>Ohne Anmeldung.</Text>
       </View>
     </View>
   );

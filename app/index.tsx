@@ -141,12 +141,7 @@ export default function WelcomeScreen() {
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
             <Text style={styles.statNumber}>ca. €158</Text>
-            <Text style={styles.statLabel}>pro Monat</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>8 bis 12</Text>
-            <Text style={styles.statLabel}>vergessene Abos</Text>
+            <Text style={styles.statLabel}>pro Monat für Abos</Text>
           </View>
           {canAnalyze && <View style={styles.statDivider} />}
           {canAnalyze && (
@@ -157,8 +152,8 @@ export default function WelcomeScreen() {
           )}
         </View>
         <Text style={styles.statsSource}>
-          Grobe Durchschnittsschätzung aus Erfahrungswerten, keine eigene Erhebung. Deine echten
-          Zahlen siehst du, {canAnalyze ? 'nach der Analyse' : 'sobald du deine Abos eingetragen hast'}.
+          Grobe Schätzung, keine eigene Umfrage. Wie viel es bei dir ist, siehst du
+          {canAnalyze ? ' nach der Analyse' : ' nach dem Eintragen'}.
         </Text>
       </View>
 
@@ -177,7 +172,7 @@ export default function WelcomeScreen() {
       </TouchableOpacity>
       {!canAnalyze && (
         <Text style={styles.lockedNote}>
-          Das automatische Erkennen aus dem Kontoauszug ist noch nicht freigeschaltet.
+          Abos aus dem Kontoauszug einlesen kommt später. Bis dahin trägst du sie selbst ein.
         </Text>
       )}
 
