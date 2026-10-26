@@ -26,7 +26,18 @@ function check(label, ok, extra) {
 }
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
-const page = await browser.newPage();
+// Der Build zählt echt: Pings an klickmill.app abfangen, damit Testläufe die
+// Live-Zähler nicht verfälschen, und die Ereignisnamen zum Prüfen mitschreiben.
+const pings = [];
+async function newPage() {
+  const p = await browser.newPage();
+  await p.route('**/klickmill.app/api/**', route => {
+    pings.push(new URL(route.request().url()).searchParams.get('ev'));
+    return route.fulfill({ status: 204, body: '' });
+  });
+  return p;
+}
+const page = await newPage();
 page.on('dialog', d => d.accept());
 page.on('pageerror', e => console.log(`   [Seitenfehler] ${e.message}`));
 // Onboarding ist ein eigener Weg (siehe onboarding-e2e falls vorhanden) und
@@ -321,6 +332,96 @@ try {
   check('Fußhinweis verlinkt die Datenschutzerklärung',
     await page.getByText(/Drittlandtransfer in die USA/).count() > 0);
   await page.setViewportSize({ width: 1280, height: 900 });
+
+  // 12) Ohne Freikontingent: ehrlicher Hinweis, Manuell vorn, kein Gratis-Versprechen
+  const p2 = await newPage();
+  await p2.addInitScript(() => localStorage.setItem('kuendigo_onboarded', '1'));
+  let quota = { limit: 0, used: 0, remaining: 0 };
+  let post = { status: 503, body: { error: { message: 'Die Analyse ist gerade nicht verfügbar.' } } };
+  let posts = 0;
+  await p2.route('**/api/analyze', route => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: quota });
+    posts++;
+    return route.fulfill({ status: post.status, json: post.body });
+  });
+  const open2 = async path => p2.goto(base + path, { waitUntil: 'networkidle' });
+
+  await open2('/upload');
+  await p2.getByText('Die automatische Analyse ist noch nicht freigeschaltet').waitFor({ timeout: 30000 });
+  check('limit 0: ehrlicher Hinweis sichtbar', true);
+  check('limit 0: kein Gratis-Versprechen', await p2.getByText(/Gratis-Analysen/).count() === 0);
+  const titles = await p2.locator('[aria-label$="Bereich aufklappen"]').evaluateAll(
+    els => els.map(e => e.getAttribute('aria-label')));
+  check('limit 0: Manuell eingeben steht vorn', /^Manuell eingeben/.test(titles[0] ?? ''), titles[0]);
+  check('Untertitel nennt die richtige Zahl der Quellen',
+    await p2.getByText(/an 6 verschiedenen Stellen/).count() > 0);
+  await open2('/manual');
+  await p2.getByText(/Betrag/).first().waitFor({ timeout: 30000 });
+  check('limit 0: kein KI-Knopf beim manuellen Eintragen',
+    await p2.getByLabel('Preis automatisch mit KI ergänzen').count() === 0);
+  await open2('/');
+  await p2.getByText('Jetzt analysieren →').waitFor({ timeout: 30000 });
+  check('limit 0: Startscreen verspricht nichts gratis', await p2.getByText(/gratis/i).count() === 0);
+
+  // Demo-Knopf zählt: Beispiel aus dem Onboarding, dann weiter zur echten Analyse
+  const p3 = await newPage();
+  await p3.goto(base + '/onboarding', { waitUntil: 'networkidle' });
+  await p3.getByText('Beispiel ansehen').first().click();
+  await p3.getByText('Jetzt meine Abos finden →').click();
+  await p3.getByText('Wo sind deine Abos?').waitFor({ timeout: 15000 });
+  check('Demo-Knopf wird gezählt', pings.includes('demo_weiter'), pings);
+  await p3.close();
+
+  // Mit Kontingent: Gratis-Hinweis statt Sperre, Fehler und Erfolg werden gezählt
+  quota = { limit: 3, used: 1, remaining: 2 };
+  await open2('/upload');
+  await p2.getByText('Noch 2 von 3 Gratis-Analysen diesen Monat').waitFor({ timeout: 30000 });
+  check('limit 3: Gratis-Hinweis mit Serverstand',
+    await p2.getByText('Die automatische Analyse ist noch nicht freigeschaltet').count() === 0);
+  await p2.getByText('Girokonto').first().click();
+
+  // PDF wird ehrlich abgewiesen und verbraucht nichts
+  const chooser = p2.waitForEvent('filechooser');
+  await p2.getByLabel('Datei auswählen, CSV').click();
+  await (await chooser).setFiles({ name: 'auszug.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4') });
+  await p2.getByText(/kann PDFs noch nicht lesen/).first().waitFor({ timeout: 15000 });
+  check('PDF wird mit ehrlichem Hinweis abgewiesen', true);
+  check('PDF bleibt nicht als gewählte Datei stehen',
+    await p2.getByText('auszug.pdf').count() === 0);
+  check('PDF löst keine Analyse aus', posts === 0, posts);
+
+  await p2.getByText('Beispiel-Auszug einsetzen →').click();
+  await p2.getByText('Abos analysieren →').click();
+  await p2.getByText('Analyse durch Anthropic').waitFor({ timeout: 15000 });
+  await p2.getByLabel(/Ich stimme der Übertragung/).click();
+  await p2.getByText('Zustimmen').click();
+  await p2.getByText('Die Analyse ist gerade nicht verfügbar.').first().waitFor({ timeout: 15000 });
+  check('Analyse-Fehler wird mit Art gezählt', pings.includes('analyse_fehler_gesperrt'), pings);
+  post = { status: 200, body: { content: [{ type: 'text', text: '[]' }] } };
+  await p2.getByText('Abos analysieren →').click();
+  await p2.waitForURL(/\/results/, { timeout: 15000 });
+  check('Analyse-Erfolg wird gezählt', pings.includes('analyse_ok'), pings);
+  check('Zähler senden nur kurze Ereignisnamen',
+    pings.every(e => e === null || /^[a-z0-9_-]{1,32}$/.test(e)), pings);
+  await p2.close();
+
+  // Altdaten: eine Liste im alten Format (ohne neuere Felder) wird weiter angezeigt
+  const p4 = await newPage();
+  await p4.addInitScript(() => {
+    localStorage.setItem('kuendigo_onboarded', '1');
+    localStorage.setItem('kuendigo_subs_v1', JSON.stringify([
+      { id: '1', name: 'Altabo Netflix', amount: 13.99, frequency: 'monthly', category: 'streaming' },
+      { id: '2', name: 'Altabo Adobe', amount: 59.99, frequency: 'yearly', category: 'software' },
+    ]));
+  });
+  await p4.goto(base + '/results', { waitUntil: 'networkidle' });
+  await p4.getByText('Alle Abos').waitFor({ timeout: 30000 });
+  check('Altdaten werden angezeigt',
+    await p4.getByText('Altabo Netflix').count() > 0 && await p4.getByText('Altabo Adobe').count() > 0);
+  check('Rechte-Kasten neutral, ohne Paragrafen',
+    await p4.getByText('ℹ️ Kündigungsfrist prüfen').count() > 0
+    && await p4.getByText(/KSchG|BGB/).count() === 0);
+  await p4.close();
 
   // Vercel liefert unbekannte Pfade an die SPA aus, sonst wären die Routen 404
   const rewrites = JSON.parse(await readFile(join(process.cwd(), 'vercel.json'), 'utf8')).rewrites ?? [];

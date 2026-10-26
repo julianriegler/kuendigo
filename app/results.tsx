@@ -18,6 +18,7 @@ import {
 import { buildLetterHtml } from '../utils/cancellationLetter';
 import { loadSenderInfo, saveSenderInfo, type SenderInfo } from '../utils/storage';
 import { meldung } from '../utils/meldung';
+import { zaehle } from '../utils/messung';
 
 function formatEur(amount: number) {
   return `€${amount.toFixed(2).replace('.', ',')}`;
@@ -727,6 +728,7 @@ export default function ResultsScreen() {
 
   /** Räumt die aus dem Onboarding gespeicherten Beispieldaten auf und führt in den echten Upload-Weg. */
   async function findRealSubscriptions() {
+    zaehle('demo_weiter');
     const next = await clearDemoSubscriptions();
     setSubscriptions(next);
     router.push('/upload');
@@ -949,9 +951,9 @@ export default function ResultsScreen() {
 
         {/* Legal note */}
         <View style={styles.legalBox}>
-          <Text style={styles.legalTitle}>ℹ️ Deine Rechte</Text>
+          <Text style={styles.legalTitle}>ℹ️ Kündigungsfrist prüfen</Text>
           <Text style={styles.legalText}>
-            Laut österreichischem KSchG und deutschem BGB kannst du monatliche Abos jederzeit zum Ende des Abrechnungszeitraums kündigen. Die meisten Anbieter benötigen keine Begründung.
+            Bis wann du kündigen kannst, steht in deinem Vertrag oder in den Geschäftsbedingungen des Anbieters. Bist du unsicher, hilft dir die Verbraucherzentrale, in Österreich die Arbeiterkammer.
           </Text>
         </View>
 

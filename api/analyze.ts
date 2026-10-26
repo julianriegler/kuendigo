@@ -17,6 +17,8 @@
  *   UPSTASH_REDIS_REST_URL    Upstash Redis, kostenloser Tarif
  *   UPSTASH_REDIS_REST_TOKEN
  *   ANTHROPIC_BASE_URL        optional, Standard https://api.anthropic.com
+ *   KUENDIGO_MONTHLY_CAP      optional, Deckel über alle Geräte je Kalendermonat
+ *                             (zum Beispiel 300). Leer oder 0 heißt aus.
  */
 
 export const config = { runtime: 'edge' };
@@ -55,12 +57,33 @@ function errorResponse(message: string, status: number, extra: Record<string, st
   return json({ error: { message } }, status, extra);
 }
 
+function currentMonth(): string {
+  const now = new Date();
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
 /** Schlüssel je Gerät und Kalendermonat, zum Beispiel kuendigo:free:2026-08:abc123 */
 function counterKey(deviceToken: string): string {
-  const now = new Date();
-  const month = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
-  return `kuendigo:free:${month}:${deviceToken}`;
+  return `kuendigo:free:${currentMonth()}:${deviceToken}`;
 }
+
+/**
+ * Deckel über alle Geräte: ein neuer Geräte-Token ist nur einen gelöschten
+ * Browserspeicher entfernt, die Grenze je Gerät allein deckelt die Kosten nicht.
+ */
+function monthlyCap(): number {
+  const cap = Number(process.env.KUENDIGO_MONTHLY_CAP ?? '');
+  return Number.isFinite(cap) && cap > 0 ? Math.floor(cap) : 0;
+}
+
+/** Eigener Präfix, damit kein Geräte-Token den Gesamtzähler treffen kann. */
+function capKey(): string {
+  return `kuendigo:cap:${currentMonth()}`;
+}
+
+const CAP_MESSAGE =
+  'Die Gratis-Analysen für diesen Monat sind schon alle vergeben. Trage in den Einstellungen ' +
+  'deinen eigenen Anthropic API Key ein oder versuche es nächsten Monat wieder.';
 
 // ─── Zähler: Upstash Redis, lokal ein Speicher im Prozess ────────────────────
 
@@ -174,6 +197,12 @@ export default async function handler(req: Request): Promise<Response> {
         { 'x-free-limit': '0', 'x-free-remaining': '0' });
     }
     try {
+      // Ist der Monatsdeckel erreicht, gibt es für niemanden mehr ein Kontingent
+      const cap = monthlyCap();
+      if (cap > 0 && (await readUsage(capKey())) >= cap) {
+        return json({ limit: 0, used: 0, remaining: 0 }, 200,
+          { 'x-free-limit': '0', 'x-free-remaining': '0' });
+      }
       const used = await readUsage(counterKey(deviceToken));
       return json(
         { limit: FREE_ANALYSES_PER_MONTH, used, remaining: Math.max(0, FREE_ANALYSES_PER_MONTH - used) },
@@ -237,8 +266,28 @@ export default async function handler(req: Request): Promise<Response> {
     return errorResponse(LIMIT_MESSAGE, 429, quotaHeaders(FREE_ANALYSES_PER_MONTH));
   }
 
+  const cap = monthlyCap();
+  if (cap > 0) {
+    let total: number;
+    try {
+      total = await consume(capKey());
+    } catch {
+      await refund(key);
+      return errorResponse('Das Freikontingent konnte gerade nicht geprüft werden. Bitte später erneut versuchen.', 503);
+    }
+    if (total > cap) {
+      await refund(capKey());
+      await refund(key);
+      return errorResponse(CAP_MESSAGE, 429, { 'x-free-limit': '0', 'x-free-remaining': '0' });
+    }
+  }
+
   const res = await callAnthropic(prepared.body, serverKey, quotaHeaders(used));
-  if (!res.ok) await refund(key); // gescheiterte Analyse kostet kein Kontingent
+  if (!res.ok) {
+    // gescheiterte Analyse kostet kein Kontingent
+    await refund(key);
+    if (cap > 0) await refund(capKey());
+  }
   return res;
 }
 

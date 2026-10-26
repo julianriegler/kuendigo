@@ -13,7 +13,8 @@ import {
 } from '../utils/analyzeSubscriptions';
 import { getApiKey } from '../utils/storage';
 import { mergeResults } from '../utils/resultStore';
-import { fetchQuota, getCachedQuota, quotaAvailable, type Quota } from '../utils/quota';
+import { fetchQuota, getCachedQuota, quotaAvailable, quotaUnavailable, type Quota } from '../utils/quota';
+import { zaehle } from '../utils/messung';
 import {
   loadConsent, getConsent, isConsentLoaded, isConsentValid, grantConsent,
 } from '../utils/consent';
@@ -21,6 +22,11 @@ import { ConsentModal } from '../components/ConsentModal';
 
 /** Anzeige, solange der Serverstand noch nicht abgefragt wurde. */
 const FREE_ANALYSES_HINT = 3;
+
+// ponytail: PDF wird abgewiesen statt gelesen, echtes PDF-Lesen kommt nach Entscheidung 1a
+const PDF_MESSAGE = 'Kündigo kann PDFs noch nicht lesen. Exportiere die Umsätze bitte als CSV-Datei.';
+const READ_ERROR = 'Die Datei konnte nicht gelesen werden. Bitte eine CSV-Datei wählen.';
+const isPdf = (name: string, type?: string) => type === 'application/pdf' || /\.pdf$/i.test(name);
 
 /** Beispiel-Kontoauszug für den Ausprobier-Link. */
 const SAMPLE_STATEMENT = [
@@ -134,7 +140,7 @@ const SOURCES: Source[] = [
     steps: [
       'Kreditkarten-App öffnen (Visa, Mastercard, Amex…)',
       'Zu Abrechnungen / Umsätze navigieren',
-      'Monatsabrechnung als CSV oder PDF exportieren',
+      'Monatsabrechnung als CSV exportieren (PDF geht noch nicht)',
       'Datei hier hochladen',
     ],
     tip: 'Viele US-Dienste (Netflix, Adobe, Spotify) laufen auf Kreditkarte — nicht auf dem Girokonto!',
@@ -158,13 +164,13 @@ const SOURCES: Source[] = [
     id: 'girokonto',
     icon: '🏦',
     title: 'Girokonto',
-    sub: 'CSV oder PDF hochladen',
+    sub: 'CSV hochladen',
     badge: null,
     type: 'file',
     steps: [
       'Online-Banking öffnen (George, Erste, Raiffeisen, N26…)',
       'Umsätze / Transaktionen aufrufen',
-      'Export als CSV oder PDF wählen',
+      'Export als CSV wählen (PDF geht noch nicht)',
       'Datei hier hochladen',
     ],
     tip: null,
@@ -194,6 +200,18 @@ const SOURCES: Source[] = [
     tip: null,
   },
 ];
+
+/** Fehlerart für den anonymen Zähler, ohne Inhalt der Meldung. */
+function fehlerArt(err: any): string {
+  const status = err?.status;
+  if (status === 429) return 'limit';
+  if (status === 503) return 'gesperrt';
+  if (status === 401) return 'key';
+  if (typeof status === 'number') return 'http';
+  if (err instanceof TypeError) return 'netz';
+  if (err instanceof SyntaxError) return 'antwort';
+  return 'sonst';
+}
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -240,6 +258,13 @@ export default function UploadScreen() {
     setActiveId(prev => prev === source.id ? null : source.id);
   }
 
+  /** Nichts Unlesbares in die Analyse geben, sonst kostet es eine Gratis-Analyse für nichts. */
+  function rejectFile(message: string) {
+    setFileName(null);
+    setFileContent(null);
+    setErrorMsg(message);
+  }
+
   async function pickFile() {
     try {
       if (Platform.OS === 'web') {
@@ -247,21 +272,17 @@ export default function UploadScreen() {
         await new Promise<void>((resolve) => {
           const input = document.createElement('input');
           input.type   = 'file';
-          input.accept = '.csv,.txt,.pdf,text/csv,text/plain,application/pdf';
+          input.accept = '.csv,.txt,text/csv,text/plain';
           input.onchange = (e: any) => {
             const file: File | undefined = e.target?.files?.[0];
             if (!file) { resolve(); return; }
+            if (isPdf(file.name, file.type)) { rejectFile(PDF_MESSAGE); resolve(); return; }
+            setErrorMsg(null);
             setFileName(file.name);
             const reader = new FileReader();
             reader.onload = () => { setFileContent(reader.result as string); resolve(); };
-            reader.onerror = () => { setFileContent('[Lesefehler]'); resolve(); };
-            // PDFs can't be read as text — just mark them
-            if (file.type === 'application/pdf') {
-              setFileContent('[PDF — wird mit KI analysiert]');
-              resolve();
-            } else {
-              reader.readAsText(file, 'utf-8');
-            }
+            reader.onerror = () => { rejectFile(READ_ERROR); resolve(); };
+            reader.readAsText(file, 'utf-8');
           };
           input.addEventListener('cancel', () => resolve());
           input.click();
@@ -269,11 +290,13 @@ export default function UploadScreen() {
       } else {
         // Native
         const result = await DocumentPicker.getDocumentAsync({
-          type: ['text/csv', 'text/plain', 'application/pdf'],
+          type: ['text/csv', 'text/plain'],
           copyToCacheDirectory: true,
         });
         if (result.canceled) return;
         const asset = result.assets[0];
+        if (isPdf(asset.name, asset.mimeType)) { rejectFile(PDF_MESSAGE); return; }
+        setErrorMsg(null);
         setFileName(asset.name);
         try {
           const content = await FileSystem.readAsStringAsync(asset.uri, {
@@ -281,7 +304,7 @@ export default function UploadScreen() {
           });
           setFileContent(content);
         } catch {
-          setFileContent('[PDF — wird mit KI analysiert]');
+          rejectFile(READ_ERROR);
         }
       }
     } catch (err: any) {
@@ -373,8 +396,10 @@ export default function UploadScreen() {
         return;
       }
       await mergeResults(subs ?? []);
+      zaehle('analyse_ok');
       router.push('/results');
     } catch (err: any) {
+      zaehle(`analyse_fehler_${fehlerArt(err)}`);
       const msg: string = err?.message ?? 'Analyse fehlgeschlagen';
       setErrorMsg(msg);
       // Also try native Alert as fallback
@@ -383,6 +408,12 @@ export default function UploadScreen() {
       setLoading(false);
     }
   }
+
+  // Ohne Freikontingent und ohne eigenen Key: ehrlich sagen und Manuell nach vorn
+  const locked = !apiKey && quotaUnavailable();
+  const sources = locked
+    ? [...SOURCES.filter(s => s.type === 'manual'), ...SOURCES.filter(s => s.type !== 'manual')]
+    : SOURCES;
 
   const activeSource = SOURCES.find(s => s.id === activeId);
   const hasInput =
@@ -421,7 +452,7 @@ export default function UploadScreen() {
         </TouchableOpacity>
       </View>
       <Text style={styles.subtitle}>
-        Abos verstecken sich an 5 verschiedenen Stellen. Wähle eine Quelle — oder mehrere nacheinander.
+        Abos verstecken sich an {SOURCES.length - 1} verschiedenen Stellen. Wähle eine Quelle — oder mehrere nacheinander.
       </Text>
 
       {/* Freikontingent */}
@@ -442,6 +473,25 @@ export default function UploadScreen() {
             </Text>
             <Text style={styles.quotaBannerSub}>
               Danach eigenen API Key eintragen oder Pro holen. Tippe hier für die Einstellungen.
+            </Text>
+          </View>
+          <Text style={styles.quotaBannerArrow}>→</Text>
+        </TouchableOpacity>
+      )}
+
+      {locked && (
+        <TouchableOpacity
+          style={styles.quotaBanner}
+          onPress={() => router.push('/manual')}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Automatische Analyse noch nicht verfügbar, Abos manuell eingeben"
+        >
+          <Text style={styles.quotaBannerIcon}>🛠️</Text>
+          <View style={styles.quotaBannerText}>
+            <Text style={styles.quotaBannerTitle}>Die automatische Analyse ist noch nicht freigeschaltet</Text>
+            <Text style={styles.quotaBannerSub}>
+              Trag deine Abos jetzt schon selbst ein, Kündigo rechnet dir die Kosten aus. Mit einem eigenen API Key in den Einstellungen geht die Analyse sofort.
             </Text>
           </View>
           <Text style={styles.quotaBannerArrow}>→</Text>
@@ -472,7 +522,7 @@ export default function UploadScreen() {
       </View>
 
       {/* Source list */}
-      {SOURCES.map(source => {
+      {sources.map(source => {
         const isActive = activeId === source.id;
         return (
           <View key={source.id}>
@@ -496,7 +546,9 @@ export default function UploadScreen() {
                       </View>
                     )}
                   </View>
-                  <Text style={styles.sourceSub}>{source.sub}</Text>
+                  <Text style={styles.sourceSub}>
+                    {locked && source.type === 'manual' ? 'Abos selbst eintragen' : source.sub}
+                  </Text>
                 </View>
               </View>
               <Text style={[styles.chevron, isActive && styles.chevronActive]}>
@@ -537,7 +589,7 @@ export default function UploadScreen() {
                       onPress={pickFile}
                       activeOpacity={0.8}
                       accessibilityRole="button"
-                      accessibilityLabel={fileName ? `Datei gewählt: ${fileName}, andere Datei wählen` : 'Datei auswählen, CSV oder PDF'}
+                      accessibilityLabel={fileName ? `Datei gewählt: ${fileName}, andere Datei wählen` : 'Datei auswählen, CSV'}
                     >
                       {fileName ? (
                         <>
@@ -549,7 +601,7 @@ export default function UploadScreen() {
                         <>
                           <Text style={styles.uploadIconLg}>📂</Text>
                           <Text style={styles.uploadPromptText}>Datei auswählen</Text>
-                          <Text style={styles.uploadHint}>CSV oder PDF</Text>
+                          <Text style={styles.uploadHint}>CSV (PDF geht noch nicht)</Text>
                         </>
                       )}
                     </TouchableOpacity>

@@ -221,6 +221,27 @@ try {
     check('ohne Serverschlüssel verspricht der Statusabruf kein Kontingent',
       noKeyStatus.json?.limit === 0, noKeyStatus.json);
     check('ohne Serverschlüssel wird die Analyse abgelehnt', noKeyAnalyze.status === 503, noKeyAnalyze.status);
+
+    // Monatsdeckel über alle Geräte, nur aktiv mit KUENDIGO_MONTHLY_CAP
+    process.env.KUENDIGO_MONTHLY_CAP = '2';
+    const capCalls = anthropic.calls.length;
+    const c1 = await analyze('deckel-1');
+    const c2 = await analyze('deckel-2');
+    const c3 = await analyze('deckel-3');
+    const capStatus = await status('deckel-4');
+    delete process.env.KUENDIGO_MONTHLY_CAP;
+    const deviceAfterCap = await status('deckel-3');
+    const offStatus = await status('deckel-4');
+    check('Deckel lässt die ersten zwei Analysen durch', c1.status === 200 && c2.status === 200, [c1.status, c2.status]);
+    check('dritte Analyse über den Deckel wird mit 429 abgelehnt',
+      c3.status === 429 && /diesen Monat/.test(c3.json?.error?.message ?? ''), c3.json);
+    check('abgelehnte Analyse erreicht Anthropic nicht', anthropic.calls.length === capCalls + 2,
+      anthropic.calls.length - capCalls);
+    check('abgelehnte Analyse kostet das Gerät nichts',
+      deviceAfterCap.json?.used === 0 && deviceAfterCap.json?.limit === 3, deviceAfterCap.json);
+    check('bei erreichtem Deckel verspricht der Statusabruf kein Kontingent',
+      capStatus.json?.limit === 0, capStatus.json);
+    check('ohne Variable ist der Deckel aus', offStatus.json?.limit === 3, offStatus.json);
   }
 } catch (err) {
   console.log(`FEHL Testlauf abgebrochen -> ${err.message}`);

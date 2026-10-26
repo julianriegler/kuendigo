@@ -7,7 +7,7 @@ import { useRouter } from 'expo-router';
 import { colors, categories } from '../constants/theme';
 import { autofillSubscription, POPULAR_SERVICES, Subscription } from '../utils/analyzeSubscriptions';
 import { getApiKey } from '../utils/storage';
-import { fetchQuota, getCachedQuota, quotaAvailable, type Quota } from '../utils/quota';
+import { fetchQuota, getCachedQuota, quotaAvailable, quotaUnavailable, type Quota } from '../utils/quota';
 import {
   loadConsent, getConsent, isConsentLoaded, isConsentValid, grantConsent,
 } from '../utils/consent';
@@ -56,6 +56,8 @@ export default function ManualScreen() {
   /** Auch das automatische Ergänzen überträgt Daten, also gilt dieselbe Sperre. */
   async function handleAutofill(serviceName: string) {
     setName(serviceName);
+    // Ohne Freikontingent und ohne eigenen Key nur den Namen übernehmen
+    if (!getApiKey() && quotaUnavailable()) return;
     const consent = isConsentLoaded() ? getConsent() : await loadConsent();
     if (!isConsentValid(consent)) {
       setPendingService(serviceName);
@@ -226,7 +228,7 @@ export default function ManualScreen() {
             value={name}
             onChangeText={setName}
           />
-          <TouchableOpacity
+          {!(!apiKey && quotaUnavailable()) && <TouchableOpacity
             style={[styles.autofillBtn, autofilling && styles.autofillBtnLoading]}
             onPress={() => name.trim() && handleAutofill(name.trim())}
             disabled={autofilling || !name.trim()}
@@ -238,7 +240,7 @@ export default function ManualScreen() {
               ? <ActivityIndicator color={colors.accent} size="small" />
               : <Text style={styles.autofillBtnText}>KI ✨</Text>
             }
-          </TouchableOpacity>
+          </TouchableOpacity>}
         </View>
 
         {/* Amount */}

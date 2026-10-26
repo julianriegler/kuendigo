@@ -26,8 +26,15 @@ export function getCachedQuota(): Quota | null {
  */
 export function quotaAvailable(): boolean {
   if (analyzeEndpoint() === null) return false;
-  // Der Server meldet limit 0, wenn er keinen Schlüssel oder keinen Zähler hat
-  return cached === null || cached.limit > 0;
+  // Erst versprechen, wenn der Server ein Kontingent bestätigt hat. Er meldet
+  // limit 0, wenn er keinen Schlüssel oder keinen Zähler hat.
+  return cached !== null && cached.limit > 0;
+}
+
+/** Steht sicher fest, dass ohne eigenen Key gerade keine Analyse geht? */
+export function quotaUnavailable(): boolean {
+  if (analyzeEndpoint() === null) return true;
+  return cached !== null && cached.limit === 0;
 }
 
 /** Liest die Kontingent-Header einer Analyse-Antwort mit. */

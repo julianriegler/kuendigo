@@ -104,7 +104,8 @@ async function callClaude(
   if (!response.ok) {
     const errBody = await response.json().catch(() => ({}));
     const msg = (errBody as any)?.error?.message ?? `HTTP ${response.status}`;
-    throw new Error(msg);
+    // Der Status reist mit, damit die Oberfläche die Fehlerart zählen kann
+    throw Object.assign(new Error(msg), { status: response.status });
   }
   const data = await response.json();
   return data.content[0]?.text ?? '[]';
