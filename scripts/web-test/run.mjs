@@ -337,12 +337,14 @@ try {
   const p2 = await newPage();
   await p2.addInitScript(() => localStorage.setItem('kuendigo_onboarded', '1'));
   let quota = { limit: 0, used: 0, remaining: 0 };
-  let post = { status: 503, body: { error: { message: 'Die Analyse ist gerade nicht verfügbar.' } } };
+  // Wie der echte Server bei Zählerstörung: 503 mit Grund, aber ohne Sperr-Header
+  let post = { status: 503, headers: { 'x-free-reason': 'zaehler' },
+    body: { error: { message: 'Die Analyse ist gerade nicht verfügbar.' } } };
   let posts = 0;
   await p2.route('**/api/analyze', route => {
     if (route.request().method() === 'GET') return route.fulfill({ json: quota });
     posts++;
-    return route.fulfill({ status: post.status, json: post.body });
+    return route.fulfill({ status: post.status, headers: post.headers, json: post.body });
   });
   const open2 = async path => p2.goto(base + path, { waitUntil: 'networkidle' });
 
@@ -355,10 +357,25 @@ try {
   check('limit 0: Manuell eingeben steht vorn', /^Manuell eingeben/.test(titles[0] ?? ''), titles[0]);
   check('Untertitel nennt die richtige Zahl der Quellen',
     await p2.getByText(/an 6 verschiedenen Stellen/).count() > 0);
+
+  // limit 0: eine echte CSV wird gar nicht erst übertragen, keine Einwilligungsabfrage
+  await p2.getByText('Girokonto').first().click();
+  const csvChooser = p2.waitForEvent('filechooser');
+  await p2.getByLabel('Datei auswählen, CSV').click();
+  await (await csvChooser).setFiles({ name: 'umsaetze.csv', mimeType: 'text/csv',
+    buffer: Buffer.from('15.07.2026;NETFLIX INTL BV;-13,99\n') });
+  await p2.getByText('umsaetze.csv').waitFor({ timeout: 15000 });
+  await p2.getByText('Abos analysieren →').click();
+  await p2.getByText(/noch nicht freigeschaltet. Trag deine Abos/).first().waitFor({ timeout: 15000 });
+  check('limit 0: Analyse überträgt nichts', posts === 0, posts);
+  check('limit 0: keine Einwilligungsabfrage', await p2.getByText('Analyse durch Anthropic').count() === 0);
+  check('limit 0: gesperrter Versuch wird gezählt', pings.includes('analyse_gesperrt'), pings);
   await open2('/manual');
   await p2.getByText(/Betrag/).first().waitFor({ timeout: 30000 });
   check('limit 0: kein KI-Knopf beim manuellen Eintragen',
     await p2.getByLabel('Preis automatisch mit KI ergänzen').count() === 0);
+  check('limit 0: keine KI-Versprechen beim manuellen Eintragen',
+    await p2.getByText(/KI ergänzt|KI ✨/).count() === 0);
   await open2('/');
   await p2.getByText('Jetzt analysieren →').waitFor({ timeout: 30000 });
   check('limit 0: Startscreen verspricht nichts gratis', await p2.getByText(/gratis/i).count() === 0);
@@ -390,20 +407,50 @@ try {
     await p2.getByText('auszug.pdf').count() === 0);
   check('PDF löst keine Analyse aus', posts === 0, posts);
 
+  const xlsxChooser = p2.waitForEvent('filechooser');
+  await p2.getByLabel('Datei auswählen, CSV').click();
+  await (await xlsxChooser).setFiles({ name: 'export.xlsx', mimeType: 'application/vnd.ms-excel',
+    buffer: Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00, 0x00]) });
+  await p2.getByText(/Das ist keine CSV-Datei/).first().waitFor({ timeout: 15000 });
+  check('Excel-Datei wird abgewiesen, ohne Analyse', posts === 0, posts);
+
   await p2.getByText('Beispiel-Auszug einsetzen →').click();
   await p2.getByText('Abos analysieren →').click();
   await p2.getByText('Analyse durch Anthropic').waitFor({ timeout: 15000 });
   await p2.getByLabel(/Ich stimme der Übertragung/).click();
   await p2.getByText('Zustimmen').click();
   await p2.getByText('Die Analyse ist gerade nicht verfügbar.').first().waitFor({ timeout: 15000 });
-  check('Analyse-Fehler wird mit Art gezählt', pings.includes('analyse_fehler_gesperrt'), pings);
-  post = { status: 200, body: { content: [{ type: 'text', text: '[]' }] } };
+  check('Analyse-Fehler wird mit Art gezählt', pings.includes('analyse_fehler_zaehler'), pings);
+  post = { status: 200, body: { content: [{ type: 'text', text: JSON.stringify([{
+    name: 'Netflix', amount: 13.99, frequency: 'monthly', category: 'streaming' }]) }] } };
   await p2.getByText('Abos analysieren →').click();
   await p2.waitForURL(/\/results/, { timeout: 15000 });
-  check('Analyse-Erfolg wird gezählt', pings.includes('analyse_ok'), pings);
+  check('Analyse mit Treffer wird gezählt', pings.includes('analyse_ok'), pings);
   check('Zähler senden nur kurze Ereignisnamen',
     pings.every(e => e === null || /^[a-z0-9_-]{1,32}$/.test(e)), pings);
   await p2.close();
+
+  // Sperre aus einer Analyse-Antwort schaltet die Seite sofort um, ohne Neuladen
+  const p5 = await newPage();
+  await p5.addInitScript(() => localStorage.setItem('kuendigo_onboarded', '1'));
+  await p5.route('**/api/analyze', route => route.request().method() === 'GET'
+    ? route.fulfill({ json: { limit: 3, used: 1, remaining: 2 } })
+    : route.fulfill({ status: 429,
+        headers: { 'x-free-limit': '0', 'x-free-remaining': '0', 'x-free-reason': 'deckel' },
+        json: { error: { message: 'Die Gratis-Analysen für diesen Monat sind schon alle vergeben.' } } }));
+  await p5.goto(base + '/upload', { waitUntil: 'networkidle' });
+  await p5.getByText('Noch 2 von 3 Gratis-Analysen diesen Monat').waitFor({ timeout: 30000 });
+  await p5.getByText('Girokonto').first().click();
+  await p5.getByText('Beispiel-Auszug einsetzen →').click();
+  await p5.getByText('Abos analysieren →').click();
+  await p5.getByText('Analyse durch Anthropic').waitFor({ timeout: 15000 });
+  await p5.getByLabel(/Ich stimme der Übertragung/).click();
+  await p5.getByText('Zustimmen').click();
+  await p5.getByText('Die Gratis-Analysen für diesen Monat sind schon vergeben').waitFor({ timeout: 15000 });
+  check('Deckel aus der Antwort ersetzt den Gratis-Hinweis sofort',
+    await p5.getByText(/Noch 2 von 3 Gratis-Analysen/).count() === 0);
+  check('Deckel wird als eigene Fehlerart gezählt', pings.includes('analyse_fehler_deckel'), pings);
+  await p5.close();
 
   // Altdaten: eine Liste im alten Format (ohne neuere Felder) wird weiter angezeigt
   const p4 = await newPage();

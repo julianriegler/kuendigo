@@ -18,7 +18,11 @@
  *   UPSTASH_REDIS_REST_TOKEN
  *   ANTHROPIC_BASE_URL        optional, Standard https://api.anthropic.com
  *   KUENDIGO_MONTHLY_CAP      optional, Deckel über alle Geräte je Kalendermonat
- *                             (zum Beispiel 300). Leer oder 0 heißt aus.
+ *                             (zum Beispiel 300). Leer oder 0 heißt aus, ein
+ *                             ungültiger Wert schließt sicher (keine Gratis-Analyse).
+ *
+ * Grund einer Sperre im Header x-free-reason: aus (kein Schlüssel oder Zähler),
+ * deckel (Monatsdeckel erreicht), zaehler (Zähler gerade nicht erreichbar).
  */
 
 export const config = { runtime: 'edge' };
@@ -38,7 +42,7 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, x-anthropic-key, x-device-token',
-  'Access-Control-Expose-Headers': 'x-free-limit, x-free-remaining',
+  'Access-Control-Expose-Headers': 'x-free-limit, x-free-remaining, x-free-reason',
 };
 
 const LIMIT_MESSAGE =
@@ -71,10 +75,16 @@ function counterKey(deviceToken: string): string {
  * Deckel über alle Geräte: ein neuer Geräte-Token ist nur einen gelöschten
  * Browserspeicher entfernt, die Grenze je Gerät allein deckelt die Kosten nicht.
  */
-function monthlyCap(): number {
-  const cap = Number(process.env.KUENDIGO_MONTHLY_CAP ?? '');
-  return Number.isFinite(cap) && cap > 0 ? Math.floor(cap) : 0;
+function monthlyCap(): number | 'zu' {
+  const raw = (process.env.KUENDIGO_MONTHLY_CAP ?? '').trim();
+  if (raw === '' || raw === '0') return 0;
+  if (/^[1-9]\d*$/.test(raw)) return Number(raw);
+  // Ein Tippfehler darf die Kostenbremse nicht still lösen
+  console.error('KUENDIGO_MONTHLY_CAP ungültig, Deckel gilt als erreicht:', raw);
+  return 'zu';
 }
+
+const LOCKED = { 'x-free-limit': '0', 'x-free-remaining': '0' };
 
 /** Eigener Präfix, damit kein Geräte-Token den Gesamtzähler treffen kann. */
 function capKey(): string {
@@ -123,7 +133,14 @@ async function consume(key: string): Promise<number> {
     return next;
   }
   const used = await upstash(cfg, ['INCR', key]);
-  if (used === 1) await upstash(cfg, ['EXPIRE', key, String(COUNTER_TTL_SECONDS)]);
+  if (used === 1) {
+    // Der Zählerstand gilt schon; ein gescheitertes EXPIRE darf ihn nicht ungültig machen
+    try {
+      await upstash(cfg, ['EXPIRE', key, String(COUNTER_TTL_SECONDS)]);
+    } catch (err) {
+      console.error('EXPIRE fehlgeschlagen', key.startsWith('kuendigo:cap') ? 'deckel' : 'geraet', err);
+    }
+  }
   return used;
 }
 
@@ -136,8 +153,9 @@ async function refund(key: string): Promise<void> {
   }
   try {
     await upstash(cfg, ['DECR', key]);
-  } catch {
-    // Rückerstattung ist Kulanz, ein Fehler darf die Antwort nicht kippen
+  } catch (err) {
+    // Rückerstattung ist Kulanz, ein Fehler darf die Antwort nicht kippen, aber sichtbar sein
+    console.error('refund fehlgeschlagen', key.startsWith('kuendigo:cap') ? 'deckel' : 'geraet', err);
   }
 }
 
@@ -193,15 +211,15 @@ export default async function handler(req: Request): Promise<Response> {
     // Ohne Serverschlüssel oder ohne Zähler gibt es kein Freikontingent,
     // dann darf die App auch keines versprechen.
     if (!serverKey || (!upstashConfig() && process.env.ALLOW_MEMORY_QUOTA !== '1')) {
-      return json({ limit: 0, used: 0, remaining: 0 }, 200,
-        { 'x-free-limit': '0', 'x-free-remaining': '0' });
+      return json({ limit: 0, used: 0, remaining: 0, reason: 'aus' }, 200,
+        { ...LOCKED, 'x-free-reason': 'aus' });
     }
     try {
       // Ist der Monatsdeckel erreicht, gibt es für niemanden mehr ein Kontingent
       const cap = monthlyCap();
-      if (cap > 0 && (await readUsage(capKey())) >= cap) {
-        return json({ limit: 0, used: 0, remaining: 0 }, 200,
-          { 'x-free-limit': '0', 'x-free-remaining': '0' });
+      if (cap === 'zu' || (cap > 0 && (await readUsage(capKey())) >= cap)) {
+        return json({ limit: 0, used: 0, remaining: 0, reason: 'deckel' }, 200,
+          { ...LOCKED, 'x-free-reason': 'deckel' });
       }
       const used = await readUsage(counterKey(deviceToken));
       return json(
@@ -210,7 +228,7 @@ export default async function handler(req: Request): Promise<Response> {
         quotaHeaders(used),
       );
     } catch {
-      return errorResponse('Kontingent konnte gerade nicht abgefragt werden.', 503);
+      return errorResponse('Kontingent konnte gerade nicht abgefragt werden.', 503, { 'x-free-reason': 'zaehler' });
     }
   }
 
@@ -231,6 +249,7 @@ export default async function handler(req: Request): Promise<Response> {
       'Die Analyse ist gerade nicht verfügbar (kein Serverschlüssel konfiguriert). ' +
       'Du kannst in den Einstellungen deinen eigenen Anthropic API Key eintragen.',
       503,
+      { ...LOCKED, 'x-free-reason': 'aus' },
     );
   }
 
@@ -246,6 +265,7 @@ export default async function handler(req: Request): Promise<Response> {
       'Das Freikontingent ist gerade nicht verfügbar. Bitte später erneut versuchen ' +
       'oder in den Einstellungen einen eigenen Anthropic API Key eintragen.',
       503,
+      { ...LOCKED, 'x-free-reason': 'aus' },
     );
   }
 
@@ -253,12 +273,15 @@ export default async function handler(req: Request): Promise<Response> {
   const prepared = prepareServerBody(await req.text());
   if ('error' in prepared) return prepared.error;
 
+  // Beide Schlüssel einmal festhalten, damit eine Rückbuchung am Monatswechsel den richtigen Monat trifft
   const key = counterKey(deviceToken);
+  const ck = capKey();
   let used: number;
   try {
     used = await consume(key);
   } catch {
-    return errorResponse('Das Freikontingent konnte gerade nicht geprüft werden. Bitte später erneut versuchen.', 503);
+    return errorResponse('Das Freikontingent konnte gerade nicht geprüft werden. Bitte später erneut versuchen.', 503,
+      { 'x-free-reason': 'zaehler' });
   }
 
   if (used > FREE_ANALYSES_PER_MONTH) {
@@ -267,26 +290,32 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   const cap = monthlyCap();
+  if (cap === 'zu') {
+    await refund(key);
+    return errorResponse(CAP_MESSAGE, 429, { ...LOCKED, 'x-free-reason': 'deckel' });
+  }
   if (cap > 0) {
     let total: number;
     try {
-      total = await consume(capKey());
+      total = await consume(ck);
     } catch {
       await refund(key);
-      return errorResponse('Das Freikontingent konnte gerade nicht geprüft werden. Bitte später erneut versuchen.', 503);
+      return errorResponse('Das Freikontingent konnte gerade nicht geprüft werden. Bitte später erneut versuchen.', 503,
+        { 'x-free-reason': 'zaehler' });
     }
     if (total > cap) {
-      await refund(capKey());
+      await refund(ck);
       await refund(key);
-      return errorResponse(CAP_MESSAGE, 429, { 'x-free-limit': '0', 'x-free-remaining': '0' });
+      return errorResponse(CAP_MESSAGE, 429, { ...LOCKED, 'x-free-reason': 'deckel' });
     }
   }
 
   const res = await callAnthropic(prepared.body, serverKey, quotaHeaders(used));
   if (!res.ok) {
-    // gescheiterte Analyse kostet kein Kontingent
+    // gescheiterte Analyse kostet kein Kontingent, der Restwert im Header zählt sie auch nicht
     await refund(key);
-    if (cap > 0) await refund(capKey());
+    if (cap > 0) await refund(ck);
+    for (const [h, v] of Object.entries(quotaHeaders(used - 1))) res.headers.set(h, v);
   }
   return res;
 }

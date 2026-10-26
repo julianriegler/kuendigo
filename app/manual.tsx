@@ -49,6 +49,8 @@ export default function ManualScreen() {
   const [searchQuery, setSearchQuery] = useState('');
 
   // Filter popular services by search
+  // Ohne Freikontingent und ohne eigenen Key gibt es keine KI-Ergänzung, die Texte sagen das auch
+  const locked = !apiKey && quotaUnavailable();
   const filteredServices = POPULAR_SERVICES.filter(s =>
     s.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -56,8 +58,12 @@ export default function ManualScreen() {
   /** Auch das automatische Ergänzen überträgt Daten, also gilt dieselbe Sperre. */
   async function handleAutofill(serviceName: string) {
     setName(serviceName);
-    // Ohne Freikontingent und ohne eigenen Key nur den Namen übernehmen
-    if (!getApiKey() && quotaUnavailable()) return;
+    // Ohne Freikontingent und ohne eigenen Key nur Name und bekannte Kategorie übernehmen
+    if (!getApiKey() && quotaUnavailable()) {
+      const known = POPULAR_SERVICES.find(s => s.name === serviceName);
+      if (known) setCategory(known.category);
+      return;
+    }
     const consent = isConsentLoaded() ? getConsent() : await loadConsent();
     if (!isConsentValid(consent)) {
       setPendingService(serviceName);
@@ -150,7 +156,9 @@ export default function ManualScreen() {
       </TouchableOpacity>
 
       <Text style={styles.title}>Manuell eintragen</Text>
-      <Text style={styles.subtitle}>Trage deine Abos direkt ein. Die KI ergänzt Preise automatisch.</Text>
+      <Text style={styles.subtitle}>
+        {locked ? 'Trage deine Abos direkt ein.' : 'Trage deine Abos direkt ein. Die KI ergänzt Preise automatisch.'}
+      </Text>
 
       {/* Freikontingent: auch das Ergänzen läuft über eine Analyse */}
       {!apiKey && quotaAvailable() && (
@@ -206,7 +214,7 @@ export default function ManualScreen() {
             activeOpacity={0.75}
             hitSlop={{ top: 4, bottom: 4, left: 0, right: 0 }}
             accessibilityRole="button"
-            accessibilityLabel={`${s.name} auswählen, Preis automatisch ergänzen`}
+            accessibilityLabel={locked ? `${s.name} auswählen` : `${s.name} auswählen, Preis automatisch ergänzen`}
           >
             <Text style={styles.chipEmoji}>{s.emoji}</Text>
             <Text style={[styles.chipLabel, name === s.name && styles.chipLabelActive]}>{s.name}</Text>
@@ -228,7 +236,7 @@ export default function ManualScreen() {
             value={name}
             onChangeText={setName}
           />
-          {!(!apiKey && quotaUnavailable()) && <TouchableOpacity
+          {!locked && <TouchableOpacity
             style={[styles.autofillBtn, autofilling && styles.autofillBtnLoading]}
             onPress={() => name.trim() && handleAutofill(name.trim())}
             disabled={autofilling || !name.trim()}
@@ -360,7 +368,11 @@ export default function ManualScreen() {
       {subs.length === 0 && (
         <View style={styles.emptyHint}>
           <Text style={styles.emptyIcon}>☝️</Text>
-          <Text style={styles.emptyText}>Wähle einen Dienst oben oder tippe einen Namen ein und drücke „KI ✨" für automatische Ergänzung.</Text>
+          <Text style={styles.emptyText}>
+            {locked
+              ? 'Wähle einen Dienst oben oder tippe einen Namen ein und trag den Preis selbst ein.'
+              : 'Wähle einen Dienst oben oder tippe einen Namen ein und drücke „KI ✨" für automatische Ergänzung.'}
+          </Text>
         </View>
       )}
     </ScrollView>

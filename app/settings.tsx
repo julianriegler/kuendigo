@@ -97,7 +97,9 @@ export default function SettingsScreen() {
   }
 
   function remove() {
-    const text = 'Danach laufen deine Analysen wieder über das Freikontingent von Kündigo.';
+    const text = quotaAvailable()
+      ? 'Danach laufen deine Analysen wieder über das Freikontingent von Kündigo.'
+      : 'Danach geht die automatische Analyse erst wieder mit einem Key.';
     if (Platform.OS === 'web') {
       if (window.confirm(`API Key löschen?\n\n${text}`)) removeKey();
       return;

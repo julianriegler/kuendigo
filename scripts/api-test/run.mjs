@@ -242,6 +242,34 @@ try {
     check('bei erreichtem Deckel verspricht der Statusabruf kein Kontingent',
       capStatus.json?.limit === 0, capStatus.json);
     check('ohne Variable ist der Deckel aus', offStatus.json?.limit === 3, offStatus.json);
+    check('voller Deckel nennt den Grund', capStatus.json?.reason === 'deckel', capStatus.json);
+
+    // Abgelehnte Anfrage wurde vom Deckel zurückgebucht: Stand 2 von 3, also noch frei
+    process.env.KUENDIGO_MONTHLY_CAP = '3';
+    const afterReject = await status('deckel-5');
+    check('Ablehnung bucht den Deckel zurück', afterReject.json?.limit === 3, afterReject.json);
+
+    // Gescheiterter Anthropic-Aufruf bucht Gerät und Deckel zurück
+    anthropic.state.fail = 1;
+    const failed = await analyze('deckel-6');
+    const afterFail = await status('deckel-7');
+    const deviceAfterFail = await status('deckel-6');
+    check('Anthropic-Fehler kommt durch', failed.status === 500, failed.status);
+    check('Anthropic-Fehler bucht den Deckel zurück', afterFail.json?.limit === 3, afterFail.json);
+    check('Anthropic-Fehler bucht das Gerät zurück', deviceAfterFail.json?.used === 0, deviceAfterFail.json);
+    check('Restwert im Header zählt die gescheiterte Analyse nicht', failed.remaining === '3', failed.remaining);
+
+    // Tippfehler schließt sicher statt den Deckel zu lösen
+    process.env.KUENDIGO_MONTHLY_CAP = '300,0';
+    const badCalls = anthropic.calls.length;
+    const badStatus = await status('deckel-8');
+    const badAnalyze = await analyze('deckel-8');
+    delete process.env.KUENDIGO_MONTHLY_CAP;
+    const badDevice = await status('deckel-8');
+    check('ungültiger Deckel meldet kein Kontingent', badStatus.json?.limit === 0, badStatus.json);
+    check('ungültiger Deckel lehnt ab, ohne Anthropic zu rufen',
+      badAnalyze.status === 429 && anthropic.calls.length === badCalls, badAnalyze.status);
+    check('ungültiger Deckel kostet das Gerät nichts', badDevice.json?.used === 0, badDevice.json);
   }
 } catch (err) {
   console.log(`FEHL Testlauf abgebrochen -> ${err.message}`);

@@ -45,9 +45,16 @@ export async function startFakeUpstash(port = 0) {
 
 export async function startFakeAnthropic(port = 0) {
   const calls = [];
+  const state = { fail: 0 }; // so viele nächste Aufrufe antworten mit 500
   const server = createServer(async (req, res) => {
     const body = await readBody(req);
     calls.push({ apiKey: req.headers['x-api-key'], body });
+    if (state.fail > 0) {
+      state.fail--;
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: 'Ersatz-Störung' } }));
+      return;
+    }
     const subs = [{
       name: 'Netflix', amount: 13.99, frequency: 'monthly', category: 'streaming',
       lastCharged: '2026-07-15', nextCharge: '2026-08-15',
@@ -56,5 +63,5 @@ export async function startFakeAnthropic(port = 0) {
     res.end(JSON.stringify({ content: [{ type: 'text', text: JSON.stringify(subs) }] }));
   });
   await new Promise(resolve => server.listen(port, '127.0.0.1', resolve));
-  return { server, calls, base: `http://127.0.0.1:${server.address().port}` };
+  return { server, calls, state, base: `http://127.0.0.1:${server.address().port}` };
 }

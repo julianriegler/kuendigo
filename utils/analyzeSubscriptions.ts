@@ -63,6 +63,14 @@ ${BASE_INSTRUCTION}`;
  * Kontingent vorbei. Nur wenn die Proxy-Adresse unbekannt ist (Native ohne
  * EXPO_PUBLIC_API_BASE_URL), geht der Aufruf direkt an Anthropic.
  */
+/** fetch scheitert nur ohne Verbindung; dann eine verständliche Meldung statt "Failed to fetch". */
+function netzFehler(): never {
+  throw Object.assign(
+    new Error('Keine Verbindung. Bitte Internet prüfen und erneut versuchen.'),
+    { kind: 'netz' },
+  );
+}
+
 async function callClaude(
   apiKey: string,
   messages: object[]
@@ -82,7 +90,7 @@ async function callClaude(
       'x-device-token': await loadDeviceToken(),
     };
     if (apiKey) headers['x-anthropic-key'] = apiKey;
-    response = await fetch(endpoint, { method: 'POST', headers, body });
+    response = await fetch(endpoint, { method: 'POST', headers, body }).catch(netzFehler);
     rememberQuotaFromResponse(response);
   } else if (apiKey) {
     response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -93,7 +101,7 @@ async function callClaude(
         'anthropic-version': '2023-06-01',
       },
       body,
-    });
+    }).catch(netzFehler);
   } else {
     throw new Error(
       'Die Analyse ist auf diesem Gerät nicht eingerichtet. Trage in den Einstellungen ' +
@@ -104,8 +112,11 @@ async function callClaude(
   if (!response.ok) {
     const errBody = await response.json().catch(() => ({}));
     const msg = (errBody as any)?.error?.message ?? `HTTP ${response.status}`;
-    // Der Status reist mit, damit die Oberfläche die Fehlerart zählen kann
-    throw Object.assign(new Error(msg), { status: response.status });
+    // Status und Sperrgrund reisen mit, damit die Oberfläche die Fehlerart zählen kann
+    throw Object.assign(new Error(msg), {
+      status: response.status,
+      reason: response.headers.get('x-free-reason') ?? undefined,
+    });
   }
   const data = await response.json();
   return data.content[0]?.text ?? '[]';

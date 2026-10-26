@@ -93,7 +93,8 @@ export default function DatenschutzScreen() {
 
       <Section heading="5. Freikontingent und Missbrauchsschutz">
         <P>
-          Ohne eigenen API Key sind drei Analysen pro Gerät und Monat frei. Dafür erzeugt die App
+          Sobald das Freikontingent freigeschaltet ist, sind ohne eigenen API Key drei Analysen pro
+          Gerät und Monat frei. Dafür erzeugt die App
           eine zufällige Geräte-Kennung und zählt damit die Anzahl deiner Analysen im laufenden
           Monat. Gespeichert werden nur diese Kennung, der Monat und ein Zähler, keine Inhalte,
           keine Namen und keine IP-Adresse.
@@ -109,7 +110,8 @@ export default function DatenschutzScreen() {
         </P>
         <P>
           Denselben Zähler ruft die App auf, wenn du eine der Hauptfunktionen startest (etwa eine
-          Analyse oder das Teilen). Gespeichert wird nur, welche Funktion an welchem Tag wie oft
+          Analyse oder das Teilen) und wenn eine Analyse geklappt hat oder an welcher Art von
+          Fehler sie gescheitert ist. Gespeichert wird nur, welche Funktion an welchem Tag wie oft
           genutzt wurde, über alle Nutzer zusammen. Ein Rückschluss auf dich ist damit nicht
           möglich. Wir nutzen diese Zahlen, um zu sehen, welche Funktionen gebraucht werden.
         </P>

@@ -26,6 +26,12 @@ const FREE_ANALYSES_HINT = 3;
 // ponytail: PDF wird abgewiesen statt gelesen, echtes PDF-Lesen kommt nach Entscheidung 1a
 const PDF_MESSAGE = 'Kündigo kann PDFs noch nicht lesen. Exportiere die Umsätze bitte als CSV-Datei.';
 const READ_ERROR = 'Die Datei konnte nicht gelesen werden. Bitte eine CSV-Datei wählen.';
+const NOT_TEXT = 'Das ist keine CSV-Datei. Exportiere die Umsätze bitte als CSV.';
+const EMPTY_FILE = 'Die Datei ist leer. Bitte den Export noch einmal herunterladen.';
+const isTextFile = (name: string) => /\.(csv|txt)$/i.test(name);
+/** Zeichensalat aus Excel, Numbers oder Bildern erkennen, bevor er eine Analyse kostet. */
+const looksBinary = (text: string) => text.includes('\u0000') || (text.match(/\uFFFD/g)?.length ?? 0) > 20;
+const LOCKED_MESSAGE = 'Die automatische Analyse ist noch nicht freigeschaltet. Trag deine Abos unter „Manuell eingeben" ein oder hinterlege in den Einstellungen einen eigenen API Key.';
 const isPdf = (name: string, type?: string) => type === 'application/pdf' || /\.pdf$/i.test(name);
 
 /** Beispiel-Kontoauszug für den Ausprobier-Link. */
@@ -203,12 +209,14 @@ const SOURCES: Source[] = [
 
 /** Fehlerart für den anonymen Zähler, ohne Inhalt der Meldung. */
 function fehlerArt(err: any): string {
+  if (err?.kind === 'netz') return 'netz';
+  if (err?.reason === 'deckel') return 'deckel';
+  if (err?.reason === 'zaehler') return 'zaehler';
+  if (err?.reason === 'aus') return 'gesperrt';
   const status = err?.status;
   if (status === 429) return 'limit';
-  if (status === 503) return 'gesperrt';
   if (status === 401) return 'key';
   if (typeof status === 'number') return 'http';
-  if (err instanceof TypeError) return 'netz';
   if (err instanceof SyntaxError) return 'antwort';
   return 'sonst';
 }
@@ -265,6 +273,12 @@ export default function UploadScreen() {
     setErrorMsg(message);
   }
 
+  function acceptText(text: string) {
+    if (!text.trim()) return rejectFile(EMPTY_FILE);
+    if (looksBinary(text)) return rejectFile(NOT_TEXT);
+    setFileContent(text);
+  }
+
   async function pickFile() {
     try {
       if (Platform.OS === 'web') {
@@ -277,10 +291,12 @@ export default function UploadScreen() {
             const file: File | undefined = e.target?.files?.[0];
             if (!file) { resolve(); return; }
             if (isPdf(file.name, file.type)) { rejectFile(PDF_MESSAGE); resolve(); return; }
+            if (!isTextFile(file.name)) { rejectFile(NOT_TEXT); resolve(); return; }
             setErrorMsg(null);
             setFileName(file.name);
+            setFileContent(null); // alter Inhalt darf beim Wechsel nicht mitlaufen
             const reader = new FileReader();
-            reader.onload = () => { setFileContent(reader.result as string); resolve(); };
+            reader.onload = () => { acceptText(reader.result as string); resolve(); };
             reader.onerror = () => { rejectFile(READ_ERROR); resolve(); };
             reader.readAsText(file, 'utf-8');
           };
@@ -296,13 +312,15 @@ export default function UploadScreen() {
         if (result.canceled) return;
         const asset = result.assets[0];
         if (isPdf(asset.name, asset.mimeType)) { rejectFile(PDF_MESSAGE); return; }
+        if (!isTextFile(asset.name)) { rejectFile(NOT_TEXT); return; }
         setErrorMsg(null);
         setFileName(asset.name);
+        setFileContent(null);
         try {
           const content = await FileSystem.readAsStringAsync(asset.uri, {
             encoding: FileSystem.EncodingType.UTF8,
           });
-          setFileContent(content);
+          acceptText(content);
         } catch {
           rejectFile(READ_ERROR);
         }
@@ -357,6 +375,13 @@ export default function UploadScreen() {
     const source = SOURCES.find(s => s.id === activeId);
     if (!source) return;
 
+    // Ohne Kontingent und eigenen Key nichts übertragen und nicht nach Einwilligung fragen
+    if (!getApiKey() && quotaUnavailable()) {
+      setErrorMsg(LOCKED_MESSAGE);
+      zaehle('analyse_gesperrt');
+      return;
+    }
+
     const consent = isConsentLoaded() ? getConsent() : await loadConsent();
     if (!isConsentValid(consent)) {
       setConsentVisible(true);
@@ -396,10 +421,11 @@ export default function UploadScreen() {
         return;
       }
       await mergeResults(subs ?? []);
-      zaehle('analyse_ok');
+      zaehle(subs?.length ? 'analyse_ok' : 'analyse_leer');
       router.push('/results');
     } catch (err: any) {
       zaehle(`analyse_fehler_${fehlerArt(err)}`);
+      setQuota(getCachedQuota()); // eine Sperre aus der Antwort sofort zeigen
       const msg: string = err?.message ?? 'Analyse fehlgeschlagen';
       setErrorMsg(msg);
       // Also try native Alert as fallback
@@ -452,7 +478,7 @@ export default function UploadScreen() {
         </TouchableOpacity>
       </View>
       <Text style={styles.subtitle}>
-        Abos verstecken sich an {SOURCES.length - 1} verschiedenen Stellen. Wähle eine Quelle — oder mehrere nacheinander.
+        Abos verstecken sich an {SOURCES.length - 1} verschiedenen Stellen. Wähle eine Quelle oder mehrere nacheinander.
       </Text>
 
       {/* Freikontingent */}
@@ -489,7 +515,11 @@ export default function UploadScreen() {
         >
           <Text style={styles.quotaBannerIcon}>🛠️</Text>
           <View style={styles.quotaBannerText}>
-            <Text style={styles.quotaBannerTitle}>Die automatische Analyse ist noch nicht freigeschaltet</Text>
+            <Text style={styles.quotaBannerTitle}>
+              {quota?.reason === 'deckel'
+                ? 'Die Gratis-Analysen für diesen Monat sind schon vergeben'
+                : 'Die automatische Analyse ist noch nicht freigeschaltet'}
+            </Text>
             <Text style={styles.quotaBannerSub}>
               Trag deine Abos jetzt schon selbst ein, Kündigo rechnet dir die Kosten aus. Mit einem eigenen API Key in den Einstellungen geht die Analyse sofort.
             </Text>
