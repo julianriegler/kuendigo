@@ -16,7 +16,8 @@ import {
   normalizeList, lastPersistFailed, hasStoredResults, clearDemoSubscriptions,
 } from '../utils/resultStore';
 import { buildLetterHtml } from '../utils/cancellationLetter';
-import { loadSenderInfo, saveSenderInfo, type SenderInfo } from '../utils/storage';
+import { getApiKey, loadSenderInfo, saveSenderInfo, type SenderInfo } from '../utils/storage';
+import { fetchQuota, quotaAvailable } from '../utils/quota';
 import { meldung } from '../utils/meldung';
 import { zaehle } from '../utils/messung';
 
@@ -726,12 +727,18 @@ export default function ResultsScreen() {
     setStorageWarning(lastPersistFailed());
   }
 
-  /** Räumt die aus dem Onboarding gespeicherten Beispieldaten auf und führt in den echten Upload-Weg. */
+  // Die Analyse nur versprechen, wenn sie wirklich geht; sonst führt der Weg zum Eintragen
+  const [canAnalyze, setCanAnalyze] = useState(() => !!getApiKey() || quotaAvailable());
+  useEffect(() => {
+    fetchQuota().then(() => setCanAnalyze(!!getApiKey() || quotaAvailable()));
+  }, []);
+
+  /** Räumt die aus dem Onboarding gespeicherten Beispieldaten auf und führt in den echten Weg. */
   async function findRealSubscriptions() {
     zaehle('demo_weiter');
     const next = await clearDemoSubscriptions();
     setSubscriptions(next);
-    router.push('/upload');
+    router.push(canAnalyze ? '/upload' : '/manual');
   }
 
   async function shareResults() {
@@ -814,7 +821,7 @@ export default function ResultsScreen() {
         {isDemo && (
           <View style={styles.noticeBox}>
             <Text style={styles.noticeText}>
-              👀 Beispieldaten. Deine Liste wird gespeichert, sobald du eine echte Analyse startest oder hier etwas änderst.
+              👀 Beispieldaten. Deine Liste wird gespeichert, sobald du {canAnalyze ? 'eine echte Analyse startest' : 'ein eigenes Abo einträgst'} oder hier etwas änderst.
             </Text>
           </View>
         )}
@@ -828,9 +835,13 @@ export default function ResultsScreen() {
               onPress={findRealSubscriptions}
               activeOpacity={0.85}
               accessibilityRole="button"
-              accessibilityLabel="Beispieldaten entfernen und jetzt meine eigenen Abos finden"
+              accessibilityLabel={canAnalyze
+                ? 'Beispieldaten entfernen und jetzt meine eigenen Abos finden'
+                : 'Beispieldaten entfernen und jetzt meine eigenen Abos eintragen'}
             >
-              <Text style={styles.demoBannerBtnText}>Jetzt meine Abos finden →</Text>
+              <Text style={styles.demoBannerBtnText}>
+                {canAnalyze ? 'Jetzt meine Abos finden →' : 'Jetzt meine Abos eintragen →'}
+              </Text>
             </TouchableOpacity>
           </View>
         )}

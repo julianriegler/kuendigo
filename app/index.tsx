@@ -135,26 +135,6 @@ export default function WelcomeScreen() {
         </TouchableOpacity>
       )}
 
-      {/* Erfahrungswerte, ausdrücklich als Schätzung gekennzeichnet. Ohne Analyse ganz weg:
-          die Zahl hat keine Quelle (Prüfer 26.10.), ob der Kasten bleibt, entscheidet Julian */}
-      {canAnalyze && <View style={styles.statsCard}>
-        <Text style={styles.statsHeading}>Schätzwerte</Text>
-        <View style={styles.statsRow}>
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>ca. €158</Text>
-            <Text style={styles.statLabel}>pro Monat für Abos</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>ca. 2 min</Text>
-            <Text style={styles.statLabel}>bis zum Ergebnis</Text>
-          </View>
-        </View>
-        <Text style={styles.statsSource}>
-          Grobe Schätzung, keine eigene Umfrage. Wie viel es bei dir ist, siehst du nach der Analyse.
-        </Text>
-      </View>}
-
       {/* CTA */}
       <TouchableOpacity
         style={styles.ctaButton}
@@ -351,58 +331,6 @@ const styles = StyleSheet.create({
     color: colors.accent,
     fontWeight: '700',
     marginLeft: 12,
-  },
-
-  // Schätzwerte
-  statsCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    width: '100%',
-    marginBottom: 28,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  statsHeading: {
-    fontSize: 12,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    color: colors.textTertiary,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  statsSource: {
-    fontSize: 12,
-    color: colors.textTertiary,
-    textAlign: 'center',
-    lineHeight: 16,
-    marginTop: 12,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    marginBottom: 2,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: colors.textTertiary,
-    textAlign: 'center',
-  },
-  statDivider: {
-    width: 1,
-    height: 32,
-    backgroundColor: colors.border,
   },
 
   // CTA

@@ -4,6 +4,17 @@
  */
 import type { Subscription } from './analyzeSubscriptions';
 
+/**
+ * Nächste Abbuchung aus dem Rhythmus, für selbst eingetragene Abos ohne bekanntes Datum.
+ * ponytail: Monatsende läuft wie bei Date über (31.1. plus 1 Monat ist der 3.3.), bei Bedarf auf Monatsletzten kappen.
+ */
+export function nextChargeAfter(from: Date, frequency: Subscription['frequency']): Date {
+  const d = new Date(from);
+  if (frequency === 'weekly') d.setDate(d.getDate() + 7);
+  else d.setMonth(d.getMonth() + (frequency === 'annual' ? 12 : frequency === 'quarterly' ? 3 : 1));
+  return d;
+}
+
 /** Wochen pro Monat im Schnitt (365 / 12 / 7). */
 const WEEKS_PER_MONTH = 4.345;
 

@@ -6,6 +6,7 @@ import {
 import { useRouter } from 'expo-router';
 import { colors, categories } from '../constants/theme';
 import { autofillSubscription, POPULAR_SERVICES, Subscription } from '../utils/analyzeSubscriptions';
+import { nextChargeAfter } from '../utils/subscriptionMath';
 import { getApiKey } from '../utils/storage';
 import { fetchQuota, getCachedQuota, quotaAvailable, quotaUnavailable, type Quota } from '../utils/quota';
 import {
@@ -109,8 +110,7 @@ export default function ManualScreen() {
     if (isNaN(parsed) || parsed <= 0) return Alert.alert('Betrag fehlt', 'Bitte einen gültigen Betrag eingeben.');
 
     const today = new Date();
-    const nextMonth = new Date(today);
-    nextMonth.setMonth(nextMonth.getMonth() + 1);
+    const next = nextChargeAfter(today, frequency);
 
     const sub: Subscription = {
       id: String(Date.now()),
@@ -119,7 +119,7 @@ export default function ManualScreen() {
       frequency,
       category,
       lastCharged: today.toISOString().slice(0, 10),
-      nextCharge: nextMonth.toISOString().slice(0, 10),
+      nextCharge: next.toISOString().slice(0, 10),
     };
 
     setSubs(prev => [sub, ...prev]);

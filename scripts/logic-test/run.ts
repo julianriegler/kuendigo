@@ -6,7 +6,7 @@
  * deshalb direkt in Node.
  */
 import { latestCancelDate, cancelDeadline, getCancellationGuide } from '../../utils/cancellationSteps.ts';
-import { monthlyAmount, annualAmount, cancelledSavings } from '../../utils/subscriptionMath.ts';
+import { monthlyAmount, annualAmount, cancelledSavings, nextChargeAfter } from '../../utils/subscriptionMath.ts';
 
 let failed = 0;
 function check(label: string, ok: boolean, extra?: unknown) {
@@ -92,6 +92,16 @@ const leer = cancelledSavings([aktiv]);
 check('ohne Kündigungen ist die Bilanz null',
   leer.count === 0 && leer.perMonth === 0 && leer.perYear === 0, leer);
 check('leere Liste stürzt nicht ab', cancelledSavings([]).perYear === 0);
+
+// ─── nextChargeAfter (selbst eingetragene Abos) ──────────────────────────────
+
+const start = new Date(2026, 9, 15); // 15.10.2026
+const iso = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+check('Monatsabo: nächste Abbuchung in einem Monat', iso(nextChargeAfter(start, 'monthly')) === '2026-11-15', iso(nextChargeAfter(start, 'monthly')));
+check('Jahresabo: nächste Abbuchung in einem Jahr', iso(nextChargeAfter(start, 'annual')) === '2027-10-15', iso(nextChargeAfter(start, 'annual')));
+check('Quartalsabo: nächste Abbuchung in drei Monaten', iso(nextChargeAfter(start, 'quarterly')) === '2027-1-15', iso(nextChargeAfter(start, 'quarterly')));
+check('Wochenabo: nächste Abbuchung in sieben Tagen', iso(nextChargeAfter(start, 'weekly')) === '2026-10-22', iso(nextChargeAfter(start, 'weekly')));
+check('Ausgangsdatum bleibt unverändert', iso(start) === '2026-10-15', iso(start));
 
 console.log(failed === 0 ? '\nAlle Prüfungen bestanden.' : `\n${failed} Prüfung(en) fehlgeschlagen.`);
 process.exit(failed === 0 ? 0 : 1);

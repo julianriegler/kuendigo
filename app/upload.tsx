@@ -35,7 +35,7 @@ const isTextFile = (name: string) => /\.(csv|txt)$/i.test(name);
  */
 const looksBinary = (text: string) =>
   text.includes('\u0000') || (text.match(/\uFFFD/g)?.length ?? 0) > text.length * 0.1;
-const LOCKED_MESSAGE = 'Die automatische Analyse ist noch nicht freigeschaltet. Trag deine Abos unter „Manuell eingeben" ein oder hinterlege in den Einstellungen einen eigenen API Key.';
+const LOCKED_MESSAGE = 'Abos aus dem Kontoauszug einlesen kommt später. Trag deine Abos bis dahin unter „Manuell eingeben" ein oder hinterlege in den Einstellungen einen eigenen API Key.';
 const isPdf = (name: string, type?: string) => type === 'application/pdf' || /\.pdf$/i.test(name);
 
 /** Beispiel-Kontoauszug für den Ausprobier-Link. */
@@ -515,14 +515,14 @@ export default function UploadScreen() {
           onPress={() => router.push('/manual')}
           activeOpacity={0.8}
           accessibilityRole="button"
-          accessibilityLabel="Automatische Analyse noch nicht verfügbar, Abos manuell eingeben"
+          accessibilityLabel="Abos aus dem Kontoauszug einlesen kommt später, Abos manuell eingeben"
         >
           <Text style={styles.quotaBannerIcon}>🛠️</Text>
           <View style={styles.quotaBannerText}>
             <Text style={styles.quotaBannerTitle}>
               {quota?.reason === 'deckel'
                 ? 'Die Gratis-Analysen für diesen Monat sind schon vergeben'
-                : 'Die automatische Analyse ist noch nicht freigeschaltet'}
+                : 'Abos aus dem Kontoauszug einlesen kommt später'}
             </Text>
             <Text style={styles.quotaBannerSub}>
               Trag deine Abos jetzt schon selbst ein, Kündigo rechnet dir die Kosten aus. Mit einem eigenen API Key in den Einstellungen geht die Analyse sofort.

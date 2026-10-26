@@ -309,9 +309,9 @@ try {
       .map(n => (n.textContent ?? '').trim().slice(0, 40)), w);
     check(`kein Text ragt über den Bildschirm hinaus bei ${w}px`, clipped.length === 0, clipped);
 
-    check(`Schätzwerte sind als solche gekennzeichnet (${w}px)`,
-      (await page.getByText('Schätzwerte').first().isVisible())
-      && (await page.getByText(/keine eigene Umfrage/).count()) > 0);
+    // Ohne belegte Quelle keine Schätzzahlen, auch mit Kontingent (Hauptkanal 27.10.)
+    check(`keine unbelegten Schätzzahlen (${w}px)`,
+      (await page.getByText(/Schätzwerte|€158|8 bis 12|ca\. 2 min|Erfahrungswerten/).count()) === 0);
 
     await page.getByText(/Zur Datenschutzerklärung/).first().scrollIntoViewIfNeeded();
     check(`Datenschutzhinweis erreichbar bei ${w}px`,
@@ -354,9 +354,11 @@ try {
   const open2 = async path => p2.goto(base + path, { waitUntil: 'networkidle' });
 
   await open2('/upload');
-  await p2.getByText('Die automatische Analyse ist noch nicht freigeschaltet').waitFor({ timeout: 30000 });
+  await p2.getByText('Abos aus dem Kontoauszug einlesen kommt später').waitFor({ timeout: 30000 });
   check('limit 0: ehrlicher Hinweis sichtbar', true);
   check('limit 0: kein Gratis-Versprechen', await p2.getByText(/Gratis-Analysen/).count() === 0);
+  check('limit 0: Upload sagt "kommt später" statt "noch nicht freigeschaltet"',
+    await p2.getByText(/noch nicht freigeschaltet/).count() === 0);
   const titles = await p2.locator('[aria-label$="Bereich aufklappen"]').evaluateAll(
     els => els.map(e => e.getAttribute('aria-label')));
   check('limit 0: Manuell eingeben steht vorn', /^Manuell eingeben/.test(titles[0] ?? ''), titles[0]);
@@ -371,7 +373,7 @@ try {
     buffer: Buffer.from('15.07.2026;NETFLIX INTL BV;-13,99\n') });
   await p2.getByText('umsaetze.csv').waitFor({ timeout: 15000 });
   await p2.getByText('Abos analysieren →').click();
-  await p2.getByText(/noch nicht freigeschaltet. Trag deine Abos/).first().waitFor({ timeout: 15000 });
+  await p2.getByText(/kommt später. Trag deine Abos bis dahin/).first().waitFor({ timeout: 15000 });
   check('limit 0: Analyse überträgt nichts', posts === 0, posts);
   check('limit 0: keine Einwilligungsabfrage', await p2.getByText('Analyse durch Anthropic').count() === 0);
   check('limit 0: gesperrter Versuch wird gezählt', pings.includes('analyse_gesperrt'), pings);
@@ -385,7 +387,7 @@ try {
   await p2.getByText('Abos eintragen →').waitFor({ timeout: 30000 });
   check('limit 0: Startscreen verspricht nichts gratis', await p2.getByText(/gratis/i).count() === 0);
   check('limit 0: Startscreen ohne unbelegte Schätzzahlen',
-    await p2.getByText(/8 bis 12|€158|Schätzwerte/).count() === 0);
+    await p2.getByText(/Schätzwerte|€158|8 bis 12|ca\. 2 min|Erfahrungswerten/).count() === 0);
   check('limit 0: Startscreen nennt Problem und Lösung',
     await p2.getByText(/Das Problem:/).count() > 0 && await p2.getByText(/Die Lösung:/).count() > 0);
   check('limit 0: Startscreen verspricht keine automatische Analyse',
@@ -408,8 +410,12 @@ try {
   check('Onboarding nennt Problem, Lösung und ersten Schritt',
     /Das Problem/.test(onboardingText) && /Die Lösung/.test(onboardingText) && /So fängst du an/.test(onboardingText));
   await p3.getByText('Beispiel ansehen').first().click();
-  await p3.getByText('Jetzt meine Abos finden →').click();
-  await p3.getByText('Wo sind deine Abos?').waitFor({ timeout: 15000 });
+  check('limit 0: Beispiel verspricht keine Analyse',
+    await p3.getByText('Jetzt meine Abos finden →').count() === 0
+    && await p3.getByText(/eine echte Analyse startest/).count() === 0);
+  await p3.getByText('Jetzt meine Abos eintragen →').click();
+  await p3.getByText(/Betrag/).first().waitFor({ timeout: 15000 });
+  check('limit 0: Beispiel führt zum Eintragen', /\/manual/.test(p3.url()), p3.url());
   check('Demo-Knopf wird gezählt', pings.includes('demo_weiter'), pings);
   await p3.close();
 
@@ -418,7 +424,7 @@ try {
   await open2('/upload');
   await p2.getByText('Noch 2 von 3 Gratis-Analysen diesen Monat').waitFor({ timeout: 30000 });
   check('limit 3: Gratis-Hinweis mit Serverstand',
-    await p2.getByText('Die automatische Analyse ist noch nicht freigeschaltet').count() === 0);
+    await p2.getByText('Abos aus dem Kontoauszug einlesen kommt später').count() === 0);
   await p2.getByText('Girokonto').first().click();
 
   // PDF wird ehrlich abgewiesen und verbraucht nichts
