@@ -23,6 +23,8 @@ export default function WelcomeScreen() {
   const [savedCount, setSavedCount] = useState(0);
   const [savedMonthly, setSavedMonthly] = useState(0);
   const [quota, setQuota] = useState<Quota | null>(getCachedQuota());
+  // Die Analyse nur versprechen, wenn sie wirklich geht; bei unbekanntem Stand die ehrliche Fassung
+  const canAnalyze = hasKey || quotaAvailable();
 
   // Nur beim allerersten Start: Onboarding zeigen, danach nie wieder
   // (Flag kuendigo_onboarded). Aus den Einstellungen bleibt es aufrufbar.
@@ -97,13 +99,21 @@ export default function WelcomeScreen() {
 
       {/* Wordmark */}
       <Text style={styles.appName}>Kündigo</Text>
-      <Text style={styles.tagline}>Alle Abos. Ein Blick.</Text>
+      <Text style={styles.tagline}>Sieh, was deine Abos kosten.</Text>
 
-      {/* Description */}
+      {/* Problem und Lösung in einfachen Worten (Julian, 27.10.) */}
       <Text style={styles.description}>
-        Lade deinen Kontoauszug hoch.{'\n'}
-        Kündigo findet alle Abos{'\n'}
-        die du vergessen hast.
+        <Text style={styles.descriptionLead}>Das Problem: </Text>
+        Viele zahlen jeden Monat für Abos, die sie vergessen haben.{'\n'}
+        <Text style={styles.descriptionLead}>Die Lösung: </Text>
+        {canAnalyze
+          ? 'Kündigo findet deine Abos im Kontoauszug und zeigt, was sie im Jahr kosten.'
+          : 'Kündigo sammelt deine Abos an einem Ort und zeigt, was sie im Jahr kosten.'}
+      </Text>
+      <Text style={styles.firstStep}>
+        {canAnalyze
+          ? 'So fängst du an: Lade einen Kontoauszug oder Screenshot hoch.'
+          : 'So fängst du an: Trag dein erstes Abo ein, zum Beispiel Netflix.'}
       </Text>
 
       {/* Gespeicherte Abos */}
@@ -138,15 +148,17 @@ export default function WelcomeScreen() {
             <Text style={styles.statNumber}>8 bis 12</Text>
             <Text style={styles.statLabel}>vergessene Abos</Text>
           </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>ca. 2 min</Text>
-            <Text style={styles.statLabel}>bis zum Ergebnis</Text>
-          </View>
+          {canAnalyze && <View style={styles.statDivider} />}
+          {canAnalyze && (
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>ca. 2 min</Text>
+              <Text style={styles.statLabel}>bis zum Ergebnis</Text>
+            </View>
+          )}
         </View>
         <Text style={styles.statsSource}>
           Grobe Durchschnittsschätzung aus Erfahrungswerten, keine eigene Erhebung. Deine echten
-          Zahlen siehst du nach der Analyse.
+          Zahlen siehst du, {canAnalyze ? 'nach der Analyse' : 'sobald du deine Abos eingetragen hast'}.
         </Text>
       </View>
 
@@ -154,15 +166,20 @@ export default function WelcomeScreen() {
       <TouchableOpacity
         style={styles.ctaButton}
         onPress={() => {
-          zaehle('analyse_start');
-          router.push('/upload');
+          zaehle(canAnalyze ? 'analyse_start' : 'eintragen_start');
+          router.push(canAnalyze ? '/upload' : '/manual');
         }}
         activeOpacity={0.85}
         accessibilityRole="button"
-        accessibilityLabel="Jetzt analysieren"
+        accessibilityLabel={canAnalyze ? 'Jetzt analysieren' : 'Abos eintragen'}
       >
-        <Text style={styles.ctaText}>Jetzt analysieren →</Text>
+        <Text style={styles.ctaText}>{canAnalyze ? 'Jetzt analysieren →' : 'Abos eintragen →'}</Text>
       </TouchableOpacity>
+      {!canAnalyze && (
+        <Text style={styles.lockedNote}>
+          Das automatische Erkennen aus dem Kontoauszug ist noch nicht freigeschaltet.
+        </Text>
+      )}
 
       {/* Ehrliche Beta-Ansprache mit Teilen und Feedback (Julian, 23.9.) */}
       <BetaHinweis />
@@ -289,7 +306,23 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 26,
-    marginBottom: 36,
+    marginBottom: 12,
+  },
+  descriptionLead: { fontWeight: '700', color: colors.textPrimary },
+  firstStep: {
+    fontSize: 15,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 32,
+  },
+  lockedNote: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 19,
+    marginTop: -8,
+    marginBottom: 16,
   },
 
   // Gespeicherte Abos

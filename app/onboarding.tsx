@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   useWindowDimensions, NativeSyntheticEvent, NativeScrollEvent,
@@ -7,31 +7,42 @@ import { useRouter } from 'expo-router';
 import { colors } from '../constants/theme';
 import { DEMO_SUBSCRIPTIONS } from '../utils/analyzeSubscriptions';
 import { loadResults, setResults } from '../utils/resultStore';
-import { setOnboarded } from '../utils/storage';
+import { getApiKey, setOnboarded } from '../utils/storage';
+import { fetchQuota, quotaAvailable } from '../utils/quota';
 
-const STEPS = [
-  {
-    icon: '💸',
-    title: 'Du zahlst für Abos, die du vergessen hast',
-    text: 'Im Schnitt schlummern auf einem Konto 8 bis 12 Abos, die niemand mehr nutzt. Das kostet oft mehrere hundert Euro im Jahr.',
-  },
-  {
-    icon: '📄',
-    title: 'Kündigo findet sie automatisch',
-    text: 'Lade deinen Kontoauszug hoch. Kündigo erkennt jedes Abo, den Betrag und den nächsten Abbuchungstermin von selbst.',
-  },
-  {
-    icon: '✅',
-    title: 'Alle Abos auf einen Blick',
-    text: 'Du siehst sofort, was du zahlst, was bald fällig wird und wie du in wenigen Schritten kündigst.',
-  },
-];
+/** Problem und Lösung in einfachen Worten; die Analyse nur versprechen, wenn sie geht (Julian, 27.10.). */
+function steps(canAnalyze: boolean) {
+  return [
+    {
+      icon: '💸',
+      title: 'Das Problem',
+      text: 'Viele zahlen jeden Monat für Abos, die sie vergessen haben. Das summiert sich schnell.',
+    },
+    {
+      icon: '📋',
+      title: 'Die Lösung',
+      text: canAnalyze
+        ? 'Lade deinen Kontoauszug hoch. Kündigo findet deine Abos und zeigt, was sie im Jahr kosten.'
+        : 'Trag deine Abos ein. Kündigo zeigt dir, was sie im Monat und im Jahr kosten. Das automatische Erkennen aus dem Kontoauszug ist noch nicht freigeschaltet.',
+    },
+    {
+      icon: '✅',
+      title: 'Dann kündigst du',
+      text: 'Du siehst, was bald fällig wird. Kündigo zeigt dir Schritt für Schritt, wie du kündigst.',
+    },
+  ];
+}
 
 export default function OnboardingScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const [page, setPage] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
+  const [canAnalyze, setCanAnalyze] = useState(() => !!getApiKey() || quotaAvailable());
+  useEffect(() => {
+    fetchQuota().then(() => setCanAnalyze(!!getApiKey() || quotaAvailable()));
+  }, []);
+  const STEPS = steps(canAnalyze);
 
   function onScrollEnd(e: NativeSyntheticEvent<NativeScrollEvent>) {
     const next = Math.round(e.nativeEvent.contentOffset.x / width);
@@ -100,6 +111,11 @@ export default function OnboardingScreen() {
       </View>
 
       <View style={styles.footer}>
+        <Text style={styles.firstStep}>
+          {canAnalyze
+            ? 'So fängst du an: Sieh dir das Beispiel an, dann lädst du deinen Auszug hoch.'
+            : 'So fängst du an: Sieh dir das Beispiel an, dann trägst du deine eigenen Abos ein.'}
+        </Text>
         <TouchableOpacity
           style={styles.ctaButton}
           onPress={beispielAnsehen}
@@ -152,4 +168,5 @@ const styles = StyleSheet.create({
   },
   ctaText: { fontSize: 17, fontWeight: '700', color: colors.bg, letterSpacing: 0.2 },
   ctaHint: { fontSize: 12, color: colors.textTertiary, marginTop: 12 },
+  firstStep: { fontSize: 15, color: colors.textSecondary, textAlign: 'center', lineHeight: 22, marginBottom: 16 },
 });

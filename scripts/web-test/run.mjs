@@ -38,6 +38,11 @@ async function newPage() {
   return p;
 }
 const page = await newPage();
+// Die bisherigen Abschnitte laufen mit bestätigtem Kontingent (wie später live mit Freikontingent);
+// Analysen selbst gehen weiter an den statischen Server und scheitern dort, wie bisher.
+await page.route('**/api/analyze', route => route.request().method() === 'GET'
+  ? route.fulfill({ json: { limit: 3, used: 0, remaining: 3 } })
+  : route.continue());
 page.on('dialog', d => d.accept());
 page.on('pageerror', e => console.log(`   [Seitenfehler] ${e.message}`));
 // Onboarding ist ein eigener Weg (siehe onboarding-e2e falls vorhanden) und
@@ -377,12 +382,28 @@ try {
   check('limit 0: keine KI-Versprechen beim manuellen Eintragen',
     await p2.getByText(/KI ergänzt|KI ✨/).count() === 0);
   await open2('/');
-  await p2.getByText('Jetzt analysieren →').waitFor({ timeout: 30000 });
+  await p2.getByText('Abos eintragen →').waitFor({ timeout: 30000 });
   check('limit 0: Startscreen verspricht nichts gratis', await p2.getByText(/gratis/i).count() === 0);
+  check('limit 0: Startscreen nennt Problem und Lösung',
+    await p2.getByText(/Das Problem:/).count() > 0 && await p2.getByText(/Die Lösung:/).count() > 0);
+  check('limit 0: Startscreen verspricht keine automatische Analyse',
+    await p2.getByText('Jetzt analysieren →').count() === 0
+    && await p2.getByText(/findet deine Abos/).count() === 0
+    && await p2.getByText(/noch nicht freigeschaltet/).count() > 0);
+  await p2.getByText('Abos eintragen →').click();
+  await p2.getByText(/Betrag/).first().waitFor({ timeout: 15000 });
+  check('limit 0: Knopf führt zum Eintragen und wird gezählt', pings.includes('eintragen_start'), pings);
 
   // Demo-Knopf zählt: Beispiel aus dem Onboarding, dann weiter zur echten Analyse
   const p3 = await newPage();
+  await p3.route('**/api/analyze', route => route.fulfill({ json: { limit: 0, used: 0, remaining: 0, reason: 'aus' } }));
   await p3.goto(base + '/onboarding', { waitUntil: 'networkidle' });
+  const onboardingText = await p3.locator('body').innerText();
+  check('limit 0: Onboarding verspricht kein automatisches Finden',
+    !/findet (sie|deine Abos) automatisch|findet deine Abos/.test(onboardingText)
+    && /noch nicht freigeschaltet/.test(onboardingText), onboardingText.slice(0, 200));
+  check('Onboarding nennt Problem, Lösung und ersten Schritt',
+    /Das Problem/.test(onboardingText) && /Die Lösung/.test(onboardingText) && /So fängst du an/.test(onboardingText));
   await p3.getByText('Beispiel ansehen').first().click();
   await p3.getByText('Jetzt meine Abos finden →').click();
   await p3.getByText('Wo sind deine Abos?').waitFor({ timeout: 15000 });
@@ -421,6 +442,8 @@ try {
     buffer: Buffer.from(Array.from({ length: 30 },
       (_, i) => `${String(i + 1).padStart(2, '0')}.07.2026;Überweisung Gebühr Müller Bäckerei;-${i},99`).join('\n'), 'latin1') });
   await p2.getByText('sparkasse.csv').waitFor({ timeout: 15000 });
+  await p2.getByLabel(/^Datei gewählt: sparkasse\.csv/).waitFor({ timeout: 15000 });
+  await p2.waitForTimeout(300); // Lesen und Prüfen laufen nach dem Setzen des Namens
   check('Bank-CSV mit Umlauten in ISO-8859-1 wird angenommen',
     await p2.getByText(/Das ist keine CSV-Datei/).count() === 0);
 
@@ -428,7 +451,8 @@ try {
   const junkChooser = p2.waitForEvent('filechooser');
   await p2.getByLabel(/^Datei gewählt: sparkasse\.csv/).click();
   await (await junkChooser).setFiles({ name: 'kaputt.csv', mimeType: 'text/csv',
-    buffer: Buffer.from(Array.from({ length: 200 }, (_, i) => (i * 37 + 128) % 256)) });
+    // ohne Null-Byte, damit wirklich die Prozent-Regel greift und nicht die NUL-Prüfung
+    buffer: Buffer.from(Array.from({ length: 200 }, (_, i) => 0x80 + ((i * 37) % 0x80))) });
   await p2.getByText(/Das ist keine CSV-Datei/).first().waitFor({ timeout: 15000 });
   check('Zeichensalat mit CSV-Endung wird abgewiesen, ohne Analyse', posts === 0, posts);
 
