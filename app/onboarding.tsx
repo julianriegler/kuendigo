@@ -28,7 +28,10 @@ function steps(canAnalyze: boolean) {
     {
       icon: '✅',
       title: 'Dann kündigst du',
-      text: 'Du siehst, was bald fällig wird. Für viele bekannte Dienste zeigt Kündigo dir Schritt für Schritt, wie du kündigst.',
+      // Fälligkeiten kennt Kündigo nur aus der Analyse; selbst eingetragene Abos bekommen ein geschätztes Datum
+      text: canAnalyze
+        ? 'Du siehst, was bald fällig wird. Für viele bekannte Dienste zeigt Kündigo dir Schritt für Schritt, wie du kündigst.'
+        : 'Für viele bekannte Dienste zeigt Kündigo dir Schritt für Schritt, wie du kündigst.',
     },
   ];
 }

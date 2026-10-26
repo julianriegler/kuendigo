@@ -135,27 +135,25 @@ export default function WelcomeScreen() {
         </TouchableOpacity>
       )}
 
-      {/* Erfahrungswerte, ausdrücklich als Schätzung gekennzeichnet */}
-      <View style={styles.statsCard}>
+      {/* Erfahrungswerte, ausdrücklich als Schätzung gekennzeichnet. Ohne Analyse ganz weg:
+          die Zahl hat keine Quelle (Prüfer 26.10.), ob der Kasten bleibt, entscheidet Julian */}
+      {canAnalyze && <View style={styles.statsCard}>
         <Text style={styles.statsHeading}>Schätzwerte</Text>
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
             <Text style={styles.statNumber}>ca. €158</Text>
             <Text style={styles.statLabel}>pro Monat für Abos</Text>
           </View>
-          {canAnalyze && <View style={styles.statDivider} />}
-          {canAnalyze && (
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>ca. 2 min</Text>
-              <Text style={styles.statLabel}>bis zum Ergebnis</Text>
-            </View>
-          )}
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>ca. 2 min</Text>
+            <Text style={styles.statLabel}>bis zum Ergebnis</Text>
+          </View>
         </View>
         <Text style={styles.statsSource}>
-          Grobe Schätzung, keine eigene Umfrage. Wie viel es bei dir ist, siehst du
-          {canAnalyze ? ' nach der Analyse' : ' nach dem Eintragen'}.
+          Grobe Schätzung, keine eigene Umfrage. Wie viel es bei dir ist, siehst du nach der Analyse.
         </Text>
-      </View>
+      </View>}
 
       {/* CTA */}
       <TouchableOpacity

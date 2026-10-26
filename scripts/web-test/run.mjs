@@ -384,12 +384,13 @@ try {
   await open2('/');
   await p2.getByText('Abos eintragen →').waitFor({ timeout: 30000 });
   check('limit 0: Startscreen verspricht nichts gratis', await p2.getByText(/gratis/i).count() === 0);
-  check('Startscreen nennt keine unbelegte Abo-Anzahl', await p2.getByText(/8 bis 12/).count() === 0);
+  check('limit 0: Startscreen ohne unbelegte Schätzzahlen',
+    await p2.getByText(/8 bis 12|€158|Schätzwerte/).count() === 0);
   check('limit 0: Startscreen nennt Problem und Lösung',
     await p2.getByText(/Das Problem:/).count() > 0 && await p2.getByText(/Die Lösung:/).count() > 0);
   check('limit 0: Startscreen verspricht keine automatische Analyse',
     await p2.getByText('Jetzt analysieren →').count() === 0
-    && await p2.getByText(/findet deine Abos/).count() === 0
+    && await p2.getByText(/findet (deine|alle) Abos/).count() === 0
     && await p2.getByText(/kommt später/).count() > 0);
   await p2.getByText('Abos eintragen →').click();
   await p2.getByText(/Betrag/).first().waitFor({ timeout: 15000 });
@@ -402,7 +403,8 @@ try {
   const onboardingText = await p3.locator('body').innerText();
   check('limit 0: Onboarding verspricht kein automatisches Finden',
     !/findet (sie|deine Abos) automatisch|findet deine Abos/.test(onboardingText)
-    && /kommt später/.test(onboardingText) && !/API Key/.test(onboardingText), onboardingText.slice(0, 200));
+    && /kommt später/.test(onboardingText) && !/API Key/.test(onboardingText)
+    && !/bald fällig/.test(onboardingText), onboardingText.slice(0, 200));
   check('Onboarding nennt Problem, Lösung und ersten Schritt',
     /Das Problem/.test(onboardingText) && /Die Lösung/.test(onboardingText) && /So fängst du an/.test(onboardingText));
   await p3.getByText('Beispiel ansehen').first().click();
