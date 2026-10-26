@@ -414,6 +414,24 @@ try {
   await p2.getByText(/Das ist keine CSV-Datei/).first().waitFor({ timeout: 15000 });
   check('Excel-Datei wird abgewiesen, ohne Analyse', posts === 0, posts);
 
+  // Bank-CSV in ISO-8859-1 (Umlaute werden beim Lesen zu Ersatzzeichen) bleibt erlaubt
+  const latinChooser = p2.waitForEvent('filechooser');
+  await p2.getByLabel('Datei auswählen, CSV').click();
+  await (await latinChooser).setFiles({ name: 'sparkasse.csv', mimeType: 'text/csv',
+    buffer: Buffer.from(Array.from({ length: 30 },
+      (_, i) => `${String(i + 1).padStart(2, '0')}.07.2026;Überweisung Gebühr Müller Bäckerei;-${i},99`).join('\n'), 'latin1') });
+  await p2.getByText('sparkasse.csv').waitFor({ timeout: 15000 });
+  check('Bank-CSV mit Umlauten in ISO-8859-1 wird angenommen',
+    await p2.getByText(/Das ist keine CSV-Datei/).count() === 0);
+
+  // Echter Zeichensalat mit CSV-Endung wird abgewiesen
+  const junkChooser = p2.waitForEvent('filechooser');
+  await p2.getByLabel(/^Datei gewählt: sparkasse\.csv/).click();
+  await (await junkChooser).setFiles({ name: 'kaputt.csv', mimeType: 'text/csv',
+    buffer: Buffer.from(Array.from({ length: 200 }, (_, i) => (i * 37 + 128) % 256)) });
+  await p2.getByText(/Das ist keine CSV-Datei/).first().waitFor({ timeout: 15000 });
+  check('Zeichensalat mit CSV-Endung wird abgewiesen, ohne Analyse', posts === 0, posts);
+
   await p2.getByText('Beispiel-Auszug einsetzen →').click();
   await p2.getByText('Abos analysieren →').click();
   await p2.getByText('Analyse durch Anthropic').waitFor({ timeout: 15000 });

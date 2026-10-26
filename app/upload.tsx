@@ -29,8 +29,12 @@ const READ_ERROR = 'Die Datei konnte nicht gelesen werden. Bitte eine CSV-Datei 
 const NOT_TEXT = 'Das ist keine CSV-Datei. Exportiere die Umsätze bitte als CSV.';
 const EMPTY_FILE = 'Die Datei ist leer. Bitte den Export noch einmal herunterladen.';
 const isTextFile = (name: string) => /\.(csv|txt)$/i.test(name);
-/** Zeichensalat aus Excel, Numbers oder Bildern erkennen, bevor er eine Analyse kostet. */
-const looksBinary = (text: string) => text.includes('\u0000') || (text.match(/\uFFFD/g)?.length ?? 0) > 20;
+/**
+ * Zeichensalat erkennen, bevor er eine Analyse kostet. Ein Anteil statt einer festen Zahl:
+ * Bank-CSVs in ISO-8859-1 machen beim Lesen als UTF-8 jedes Umlaut zum Ersatzzeichen.
+ */
+const looksBinary = (text: string) =>
+  text.includes('\u0000') || (text.match(/\uFFFD/g)?.length ?? 0) > text.length * 0.1;
 const LOCKED_MESSAGE = 'Die automatische Analyse ist noch nicht freigeschaltet. Trag deine Abos unter „Manuell eingeben" ein oder hinterlege in den Einstellungen einen eigenen API Key.';
 const isPdf = (name: string, type?: string) => type === 'application/pdf' || /\.pdf$/i.test(name);
 

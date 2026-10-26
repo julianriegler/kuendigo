@@ -62,7 +62,8 @@ export async function fetchQuota(): Promise<Quota | null> {
       method: 'GET',
       headers: { 'x-device-token': await loadDeviceToken() },
       // ponytail: ohne AbortSignal.timeout (ältere Laufzeiten) bleibt es beim Warten ohne Zeitlimit
-      signal: typeof AbortSignal?.timeout === 'function' ? AbortSignal.timeout(8000) : undefined,
+      signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+        ? AbortSignal.timeout(8000) : undefined,
     });
     if (!res.ok) return null;
     const data = await res.json();
