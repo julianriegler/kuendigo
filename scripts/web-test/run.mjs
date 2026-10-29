@@ -450,7 +450,20 @@ try {
     && !/bald fällig/.test(onboardingText), onboardingText.slice(0, 200));
   check('Onboarding nennt Problem, Lösung und ersten Schritt',
     /Das Problem/.test(onboardingText) && /Die Lösung/.test(onboardingText) && /So fängst du an/.test(onboardingText));
+  // Aufbau nach Klartext: Name und Nutzen oben, Weiter führt durch, am Ende zwei gleich große Wege
+  check('Einführung zeigt Name und Nutzen oben',
+    await p3.getByText('Kündigo', { exact: true }).first().isVisible()
+    && await p3.getByText('Sieh, was deine Abos kosten.').first().isVisible());
+  check('Seite 1 fragt konkret', await p3.getByText('Zahlst du für Abos, die du vergessen hast?').isVisible());
+  check('am Anfang nur Weiter, noch keine Wege', await p3.getByText('Beispiel ansehen').isVisible() === false);
+  await p3.getByText('Weiter →').click();
+  await p3.getByText('Weiter →').click();
+  await p3.getByText('Erstes Abo eintragen →').waitFor({ timeout: 10000 });
+  check('letzte Seite zeigt beide Wege',
+    await p3.getByText('Erstes Abo eintragen →').isVisible() && await p3.getByText('Beispiel ansehen').isVisible());
   await p3.getByText('Beispiel ansehen').first().click();
+  await p3.waitForURL(/\/results/, { timeout: 15000 });
+  check('Beispiel aus der Einführung wird gezählt', pings.includes('beispiel_start'), pings);
   await p3.getByText('Jetzt meine Abos eintragen →').waitFor({ timeout: 15000 });
   check('limit 0: Beispiel-Knopf verspricht keine Analyse',
     await p3.getByText('Jetzt meine Abos finden →').count() === 0);
@@ -459,6 +472,21 @@ try {
   check('limit 0: Beispiel führt zum Eintragen', /\/manual/.test(p3.url()), p3.url());
   check('Demo-Knopf wird gezählt', pings.includes('demo_weiter'), pings);
   await p3.close();
+
+  const p6 = await newPage();
+  await p6.route('**/api/analyze', route => route.fulfill({ json: { limit: 0, used: 0, remaining: 0, reason: 'aus' } }));
+  await p6.goto(base + '/onboarding', { waitUntil: 'networkidle' });
+  const vorher = pings.filter(e => e === 'eintragen_start').length;
+  await p6.getByText('Weiter →').click();
+  await p6.getByText('Weiter →').click();
+  await p6.getByText('Erstes Abo eintragen →').click();
+  await p6.getByText(/Betrag/).first().waitFor({ timeout: 15000 });
+  check('Einführung führt direkt zum Eintragen und zählt es',
+    /\/manual/.test(p6.url()) && pings.filter(e => e === 'eintragen_start').length === vorher + 1, p6.url());
+  await p6.getByText('← Zurück').click();
+  await p6.getByText('Abos eintragen →').waitFor({ timeout: 15000 });
+  check('Zurück ohne Vorgeschichte landet auf der Startseite', true);
+  await p6.close();
 
   // Mit Kontingent: Gratis-Hinweis statt Sperre, Fehler und Erfolg werden gezählt
   quota = { limit: 3, used: 1, remaining: 2 };

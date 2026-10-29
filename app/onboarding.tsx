@@ -8,30 +8,46 @@ import { colors } from '../constants/theme';
 import { DEMO_SUBSCRIPTIONS } from '../utils/analyzeSubscriptions';
 import { loadResults, setResults } from '../utils/resultStore';
 import { getApiKey, setOnboarded } from '../utils/storage';
+import { zaehle } from '../utils/messung';
 import { fetchQuota, quotaAvailable } from '../utils/quota';
 
-/** Problem und Lösung in einfachen Worten; die Analyse nur versprechen, wenn sie geht (Julian, 27.10.). */
+/**
+ * Aufbau nach dem Muster von Klartext (Julian, 29.10.): oben Name und Nutzen, Seite 1 stellt eine
+ * konkrete Frage und zeigt Problem, Lösung und ersten Schritt. Die Analyse wird nur versprochen,
+ * wenn sie wirklich geht (Julian, 27.10.).
+ */
 function steps(canAnalyze: boolean) {
   return [
     {
       icon: '💸',
-      title: 'Das Problem',
-      text: 'Viele zahlen jeden Monat für Abos, die sie vergessen haben. Das summiert sich schnell.',
+      title: 'Zahlst du für Abos, die du vergessen hast?',
+      paragraphs: [
+        'Das Problem: Abos laufen jeden Monat weiter, auch wenn du sie längst nicht mehr nutzt.',
+        canAnalyze
+          ? 'Die Lösung: Du lädst deinen Kontoauszug hoch. Kündigo findet deine Abos und zeigt dir, was sie im Monat und im Jahr kosten.'
+          : 'Die Lösung: Du trägst deine Abos ein. Kündigo zeigt dir, was sie im Monat und im Jahr kosten.',
+        canAnalyze
+          ? 'So fängst du an: Lade einen Kontoauszug oder Screenshot hoch.'
+          : 'So fängst du an: Trag dein erstes Abo ein, zum Beispiel Netflix.',
+      ],
     },
     {
       icon: '📋',
-      title: 'Die Lösung',
-      text: canAnalyze
-        ? 'Lade deinen Kontoauszug hoch. Kündigo findet deine Abos und zeigt, was sie im Jahr kosten.'
-        : 'Trag deine Abos ein. Kündigo zeigt dir, was sie im Monat und im Jahr kosten. Abos aus dem Kontoauszug einlesen kommt später.',
+      title: 'Alles auf einen Blick',
+      paragraphs: canAnalyze
+        ? ['Jedes Abo mit seinem Preis, zusammengerechnet für Monat und Jahr.']
+        : [
+            'Jedes Abo mit seinem Preis, zusammengerechnet für Monat und Jahr.',
+            'Abos aus dem Kontoauszug einlesen kommt später.',
+          ],
     },
     {
       icon: '✅',
       title: 'Dann kündigst du',
       // Fälligkeiten kennt Kündigo nur aus der Analyse; selbst eingetragene Abos bekommen ein geschätztes Datum
-      text: canAnalyze
+      paragraphs: [canAnalyze
         ? 'Du siehst, was bald fällig wird. Für viele bekannte Dienste zeigt Kündigo dir Schritt für Schritt, wie du kündigst.'
-        : 'Für viele bekannte Dienste zeigt Kündigo dir Schritt für Schritt, wie du kündigst.',
+        : 'Für viele bekannte Dienste zeigt Kündigo dir Schritt für Schritt, wie du kündigst.'],
     },
   ];
 }
@@ -46,6 +62,21 @@ export default function OnboardingScreen() {
     fetchQuota().then(() => setCanAnalyze(!!getApiKey() || quotaAvailable()));
   }, []);
   const STEPS = steps(canAnalyze);
+  const last = page >= STEPS.length - 1;
+
+  function weiter() {
+    const next = Math.min(page + 1, STEPS.length - 1);
+    // ohne Animation: Zwischenstände beim Blättern würden die Seitenzahl kurz zurücksetzen
+    scrollRef.current?.scrollTo({ x: width * next, animated: false });
+    setPage(next);
+  }
+
+  /** Direkter Weg ohne Beispiel: eintragen (heute) oder hochladen (mit Analyse). */
+  async function selbstAnfangen() {
+    await setOnboarded();
+    zaehle(canAnalyze ? 'analyse_start' : 'eintragen_start');
+    router.replace(canAnalyze ? '/upload' : '/manual');
+  }
 
   function onScrollEnd(e: NativeSyntheticEvent<NativeScrollEvent>) {
     const next = Math.round(e.nativeEvent.contentOffset.x / width);
@@ -63,6 +94,7 @@ export default function OnboardingScreen() {
    */
   async function beispielAnsehen() {
     await setOnboarded();
+    zaehle('beispiel_start');
     const bestehende = await loadResults();
     if (!bestehende.some(s => !s.demo)) {
       await setResults(DEMO_SUBSCRIPTIONS.map(sub => ({ ...sub, demo: true })));
@@ -78,15 +110,29 @@ export default function OnboardingScreen() {
 
   return (
     <View style={styles.root}>
-      <TouchableOpacity
-        style={styles.skipBtn}
-        onPress={ueberspringen}
-        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        accessibilityRole="button"
-        accessibilityLabel="Onboarding überspringen"
-      >
-        <Text style={styles.skipText}>Überspringen</Text>
-      </TouchableOpacity>
+      {/* Name und Nutzen oben, wie bei Klartext */}
+      <View style={styles.headerRow}>
+        <View style={styles.brand}>
+          <View style={styles.brandBadge}>
+            <Text style={styles.brandLetter}>K</Text>
+          </View>
+          <View>
+            <Text style={styles.brandName}>Kündigo</Text>
+            <Text style={styles.brandTagline}>Sieh, was deine Abos kosten.</Text>
+          </View>
+        </View>
+        {!last && (
+          <TouchableOpacity
+            onPress={ueberspringen}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityRole="button"
+            accessibilityLabel="Einführung überspringen"
+            style={styles.skipBtn}
+          >
+            <Text style={styles.skipText}>Überspringen</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
       <ScrollView
         ref={scrollRef}
@@ -102,7 +148,9 @@ export default function OnboardingScreen() {
           <View key={i} style={[styles.slide, { width }]}>
             <Text style={styles.icon}>{step.icon}</Text>
             <Text style={styles.title}>{step.title}</Text>
-            <Text style={styles.text}>{step.text}</Text>
+            {step.paragraphs.map((t, j) => (
+              <Text key={j} style={[styles.text, j > 0 && styles.textNext]}>{t}</Text>
+            ))}
           </View>
         ))}
       </ScrollView>
@@ -114,20 +162,39 @@ export default function OnboardingScreen() {
       </View>
 
       <View style={styles.footer}>
-        <Text style={styles.firstStep}>
-          {canAnalyze
-            ? 'So fängst du an: Sieh dir das Beispiel an, dann lädst du deinen Auszug hoch.'
-            : 'So fängst du an: Sieh dir das Beispiel an, dann trägst du deine eigenen Abos ein.'}
-        </Text>
-        <TouchableOpacity
-          style={styles.ctaButton}
-          onPress={beispielAnsehen}
-          activeOpacity={0.85}
-          accessibilityRole="button"
-          accessibilityLabel="Beispiel ansehen, zeigt eine Liste mit Beispiel-Abos"
-        >
-          <Text style={styles.ctaText}>Beispiel ansehen →</Text>
-        </TouchableOpacity>
+        {!last ? (
+          <TouchableOpacity
+            style={styles.ctaButton}
+            onPress={weiter}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Weiter zur nächsten Seite"
+          >
+            <Text style={styles.ctaText}>Weiter →</Text>
+          </TouchableOpacity>
+        ) : (
+          <>
+            {/* Zwei gleich große Wege: selbst anfangen oder erst das Beispiel */}
+            <TouchableOpacity
+              style={styles.ctaButton}
+              onPress={selbstAnfangen}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={canAnalyze ? 'Kontoauszug hochladen' : 'Erstes Abo eintragen'}
+            >
+              <Text style={styles.ctaText}>{canAnalyze ? 'Kontoauszug hochladen →' : 'Erstes Abo eintragen →'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.secondButton}
+              onPress={beispielAnsehen}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Beispiel ansehen, zeigt eine Liste mit Beispiel-Abos"
+            >
+              <Text style={styles.secondText}>Beispiel ansehen</Text>
+            </TouchableOpacity>
+          </>
+        )}
         <Text style={styles.ctaHint}>Ohne Anmeldung.</Text>
       </View>
     </View>
@@ -138,15 +205,24 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, justifyContent: 'space-between' },
   pager: { flexGrow: 0 },
 
-  skipBtn: {
-    position: 'absolute', top: 56, right: 24, zIndex: 1,
-    minHeight: 44, justifyContent: 'center',
+  headerRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 24, paddingTop: 48,
   },
+  brand: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  brandBadge: {
+    width: 36, height: 36, borderRadius: 18, backgroundColor: colors.accent,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  brandLetter: { fontSize: 18, fontWeight: '800', color: colors.bg },
+  brandName: { fontSize: 17, fontWeight: '800', color: colors.textPrimary },
+  brandTagline: { fontSize: 13, color: colors.textSecondary },
+  skipBtn: { minHeight: 44, justifyContent: 'center' },
   skipText: { fontSize: 14, color: colors.textSecondary, fontWeight: '600' },
 
   slide: {
     alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: 32, paddingTop: 96, paddingBottom: 24,
+    paddingHorizontal: 32, paddingTop: 40, paddingBottom: 24,
   },
   icon: { fontSize: 64, marginBottom: 28 },
   title: {
@@ -156,6 +232,7 @@ const styles = StyleSheet.create({
   text: {
     fontSize: 16, color: colors.textSecondary, textAlign: 'center', lineHeight: 24,
   },
+  textNext: { marginTop: 12 },
 
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 8 },
   dot: {
@@ -170,6 +247,11 @@ const styles = StyleSheet.create({
     width: '100%', minHeight: 44, alignItems: 'center',
   },
   ctaText: { fontSize: 17, fontWeight: '700', color: colors.bg, letterSpacing: 0.2 },
+  secondButton: {
+    borderRadius: 14, borderWidth: 1.5, borderColor: colors.accent,
+    paddingVertical: 17, paddingHorizontal: 40,
+    width: '100%', minHeight: 44, alignItems: 'center', marginTop: 12,
+  },
+  secondText: { fontSize: 17, fontWeight: '700', color: colors.accent, letterSpacing: 0.2 },
   ctaHint: { fontSize: 12, color: colors.textTertiary, marginTop: 12 },
-  firstStep: { fontSize: 15, color: colors.textSecondary, textAlign: 'center', lineHeight: 22, marginBottom: 16 },
 });

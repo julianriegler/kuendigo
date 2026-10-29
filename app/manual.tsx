@@ -163,7 +163,7 @@ export default function ManualScreen() {
     <>
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
       <TouchableOpacity
-        onPress={() => router.back()}
+        onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
         style={styles.backBtn}
         hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         accessibilityRole="button"
