@@ -14,7 +14,8 @@ import {
 } from '../utils/consent';
 import { ConsentModal } from '../components/ConsentModal';
 import {
-  mergeResults, lastPersistFailed, normalizeName, removeSubscription as removeStored,
+  mergeResults, lastPersistFailed, normalizeName, loadResults, upsertSubscription,
+  removeSubscription as removeStored,
 } from '../utils/resultStore';
 import { meldung } from '../utils/meldung';
 import { zaehle } from '../utils/messung';
@@ -45,6 +46,11 @@ export default function ManualScreen() {
   // In dieser Sitzung eingetragene Abos; jedes ist beim Hinzufügen schon gespeichert
   const [subs, setSubs] = useState<Subscription[]>([]);
   const amountRef = useRef<TextInput>(null);
+  const [saving, setSaving] = useState(false);
+  const busy = useRef(false); // greift sofort, der Zustand erst beim nächsten Zeichnen
+  // Gab es das Abo schon vor dieser Sitzung, stellt das ✕ seinen alten Stand wieder her statt zu löschen
+  const vorher = useRef(new Map<string, Subscription>());
+  const neu = useRef(new Set<string>());
 
   // Form state
   const [name, setName] = useState('');
@@ -115,7 +121,7 @@ export default function ManualScreen() {
     const parsed = parseFloat(amount.replace(',', '.'));
     // meldung statt Alert.alert: Alert ist im Browser stumm
     if (!name.trim()) return meldung('Name fehlt', 'Bitte einen Servicenamen eingeben.');
-    if (isNaN(parsed) || parsed <= 0) {
+    if (!Number.isFinite(parsed) || parsed <= 0) {
       amountRef.current?.focus();
       return meldung('Betrag fehlt', 'Bitte trag den Preis ein, zum Beispiel 13,99.');
     }
@@ -133,25 +139,65 @@ export default function ManualScreen() {
       nextCharge: next.toISOString().slice(0, 10),
     };
 
-    const stored = await mergeResults([sub]);
-    if (lastPersistFailed()) {
-      return meldung('Nicht gespeichert', 'Das Abo konnte auf diesem Gerät nicht gespeichert werden. Bitte versuch es noch einmal.');
+    if (busy.current) return; // Doppeltippen speichert und zählt nicht doppelt
+    busy.current = true;
+    setSaving(true);
+    try {
+      // Gleicher Dienst mit gleichem Betrag wird zusammengeführt (wie dedupeKey im Speicher)
+      const key = (s: Subscription) => `${normalizeName(s.name)}|${s.amount.toFixed(2)}`;
+      const alt = (await loadResults()).find(s => !s.demo && key(s) === key(sub));
+      const stored = await mergeResults([sub]);
+      if (lastPersistFailed()) {
+        await loadResults(); // Zwischenspeicher auf den Stand des Geräts zurücksetzen
+        return meldung('Nicht gespeichert', 'Das Abo konnte auf diesem Gerät nicht gespeichert werden. Bitte versuch es noch einmal.');
+      }
+      const saved = stored.find(s => key(s) === key(sub));
+      if (!saved) {
+        return meldung('Nicht gespeichert', 'Das Abo konnte nicht gespeichert werden. Bitte prüf Name und Betrag.');
+      }
+      if (!alt) {
+        neu.current.add(saved.id);
+        zaehle('abo_gespeichert'); // nur ein wirklich neues Abo zählt
+      } else if (!neu.current.has(alt.id) && !vorher.current.has(alt.id)) {
+        vorher.current.set(alt.id, alt);
+      }
+      setSubs(prev => [saved, ...prev.filter(s => s.id !== saved.id)]);
+      // Reset form
+      setName('');
+      setAmount('');
+      setFrequency('monthly');
+      setCategory('streaming');
+    } catch (err) {
+      console.error('[manual] Speichern', err);
+      meldung('Nicht gespeichert', 'Etwas ist schiefgelaufen. Bitte versuch es noch einmal.');
+    } finally {
+      busy.current = false;
+      setSaving(false);
     }
-    zaehle('abo_gespeichert');
-    // Gleicher Dienst mit gleichem Betrag wird zusammengeführt und behält seine ID
-    const saved = stored.find(s =>
-      normalizeName(s.name) === normalizeName(sub.name) && s.amount.toFixed(2) === sub.amount.toFixed(2)) ?? sub;
-    setSubs(prev => [saved, ...prev.filter(s => s.id !== saved.id)]);
-    // Reset form
-    setName('');
-    setAmount('');
-    setFrequency('monthly');
-    setCategory('streaming');
   }
 
   async function removeSubscription(id: string) {
-    await removeStored(id);
-    setSubs(prev => prev.filter(s => s.id !== id));
+    if (busy.current) return;
+    busy.current = true;
+    setSaving(true);
+    try {
+      const alt = vorher.current.get(id);
+      if (alt) await upsertSubscription(alt);
+      else await removeStored(id);
+      if (lastPersistFailed()) {
+        await loadResults();
+        return meldung('Nicht entfernt', 'Das Abo konnte auf diesem Gerät nicht geändert werden. Bitte versuch es noch einmal.');
+      }
+      vorher.current.delete(id);
+      neu.current.delete(id);
+      setSubs(prev => prev.filter(s => s.id !== id));
+    } catch (err) {
+      console.error('[manual] Entfernen', err);
+      meldung('Nicht entfernt', 'Etwas ist schiefgelaufen. Bitte versuch es noch einmal.');
+    } finally {
+      busy.current = false;
+      setSaving(false);
+    }
   }
 
   function goToResults() {
@@ -323,6 +369,7 @@ export default function ManualScreen() {
         <TouchableOpacity
           style={styles.addBtn}
           onPress={addSubscription}
+          disabled={saving}
           activeOpacity={0.85}
           accessibilityRole="button"
           accessibilityLabel="Abo hinzufügen"

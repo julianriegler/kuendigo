@@ -572,6 +572,38 @@ try {
   check('Deckel wird als eigene Fehlerart gezählt', pings.includes('analyse_fehler_deckel'), pings);
   await p5.close();
 
+  // Schon vorher gespeichertes Abo: erneut eintragen und ✕ darf es nicht löschen, und es zählt nicht als neu
+  const p7 = await newPage();
+  await p7.addInitScript(() => {
+    if (sessionStorage.getItem('vorbereitet')) return;
+    sessionStorage.setItem('vorbereitet', '1');
+    localStorage.setItem('kuendigo_onboarded', '1');
+    localStorage.setItem('kuendigo_subs_v1', JSON.stringify([{ id: 'alt-1', name: 'Netflix', amount: 13.99,
+      frequency: 'monthly', category: 'streaming', cancelled: true, cancelledAt: '2026-10-01T10:00:00.000Z' }]));
+  });
+  await p7.route('**/api/analyze', route => route.fulfill({ json: { limit: 0, used: 0, remaining: 0, reason: 'aus' } }));
+  const p7dialogs = [];
+  p7.on('dialog', d => { p7dialogs.push(d.message()); d.accept(); });
+  await p7.goto(base + '/manual', { waitUntil: 'networkidle' });
+  const zaehlerVorher = pings.filter(e => e === 'abo_gespeichert').length;
+  await p7.getByPlaceholder('z.B. 13,99').fill('1e400');
+  await p7.getByPlaceholder('z.B. Netflix, Spotify…').fill('Netflix');
+  await p7.getByText('+ Abo hinzufügen').click();
+  await p7.waitForTimeout(300);
+  check('unendlicher Betrag wird abgewiesen', p7dialogs.some(m => /Betrag fehlt/.test(m)), p7dialogs);
+  await p7.getByPlaceholder('z.B. 13,99').fill('13,99');
+  await p7.getByText('+ Abo hinzufügen').click();
+  await p7.getByText('Meine Abos (1)').waitFor({ timeout: 10000 });
+  check('erneut eingetragenes Abo zählt nicht als neu',
+    pings.filter(e => e === 'abo_gespeichert').length === zaehlerVorher);
+  await p7.getByLabel('Netflix entfernen').click();
+  await p7.waitForTimeout(500);
+  const nachher = await p7.evaluate(() => JSON.parse(localStorage.getItem('kuendigo_subs_v1') ?? '[]'));
+  check('✕ stellt das alte Abo wieder her statt es zu löschen',
+    nachher.length === 1 && nachher[0].name === 'Netflix' && nachher[0].cancelled === true
+    && nachher[0].cancelledAt === '2026-10-01T10:00:00.000Z', nachher);
+  await p7.close();
+
   // Altdaten: eine Liste im alten Format (ohne neuere Felder) wird weiter angezeigt
   const p4 = await newPage();
   await p4.addInitScript(() => {

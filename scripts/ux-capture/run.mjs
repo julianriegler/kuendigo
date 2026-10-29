@@ -2,14 +2,15 @@
  * Hält den Weg eines neuen Besuchers als Bildschirmfotos und Seitentext fest
  * (Handy-Breite, Kontingent aus wie live). Für die UX-Prüfung, zählt nichts mit.
  *
- *   node scripts/ux-capture/run.mjs <ausgabeordner>
+ *   node scripts/ux-capture/run.mjs <ausgabeordner außerhalb des Projekts>
  */
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { startStaticServer } from '../dev-static.mjs';
 
-const OUT = process.argv[2] ?? 'ux-capture';
+const OUT = process.argv[2];
+if (!OUT) { console.log('Bitte einen Ausgabeordner außerhalb des Projekts angeben.'); process.exit(1); }
 await mkdir(OUT, { recursive: true });
 const { server, base } = await startStaticServer(join(process.cwd(), 'dist'));
 const browser = await chromium.launch({
@@ -33,8 +34,6 @@ try {
   await page.getByText('Das Problem').first().waitFor({ timeout: 30000 });
   await shot('einfuehrung-1');
   for (const i of [2, 3]) {
-    await page.mouse.move(350, 400);
-    await page.locator('div[style*="overflow-x"], [data-testid]').first().evaluate(() => {}).catch(() => {});
     await page.evaluate(w => { const s = [...document.querySelectorAll('div')].find(d => d.scrollWidth > d.clientWidth * 2); if (s) s.scrollLeft = w; }, 390 * (i - 1));
     await shot(`einfuehrung-${i}`);
   }
