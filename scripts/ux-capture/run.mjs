@@ -31,13 +31,13 @@ async function shot(name) {
 
 try {
   await page.goto(base + '/', { waitUntil: 'networkidle' });
-  await page.getByText('Das Problem').first().waitFor({ timeout: 30000 });
+  await page.getByText('Zahlst du für Abos').first().waitFor({ timeout: 30000 });
   await shot('einfuehrung-1');
   for (const i of [2, 3]) {
-    await page.evaluate(w => { const s = [...document.querySelectorAll('div')].find(d => d.scrollWidth > d.clientWidth * 2); if (s) s.scrollLeft = w; }, 390 * (i - 1));
+    await page.getByText('Weiter →').click();
     await shot(`einfuehrung-${i}`);
   }
-  await page.getByText('Beispiel ansehen').first().click();
+  await page.getByText('Erst eine Beispiel-Liste ansehen').click();
   await page.getByText('Jetzt meine Abos eintragen →').waitFor({ timeout: 15000 });
   await shot('beispiel-ergebnis');
   await page.goto(base + '/', { waitUntil: 'networkidle' });

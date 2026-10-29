@@ -27,8 +27,8 @@ function steps(canAnalyze: boolean) {
           ? 'Die Lösung: Du lädst deinen Kontoauszug hoch. Kündigo findet deine Abos und zeigt dir, was sie im Monat und im Jahr kosten.'
           : 'Die Lösung: Du trägst deine Abos ein. Kündigo zeigt dir, was sie im Monat und im Jahr kosten.',
         canAnalyze
-          ? 'So fängst du an: Lade einen Kontoauszug oder Screenshot hoch.'
-          : 'So fängst du an: Trag dein erstes Abo ein, zum Beispiel Netflix.',
+          ? 'Gleich lädst du einen Kontoauszug oder Screenshot hoch.'
+          : 'Gleich trägst du dein erstes Abo ein, zum Beispiel Netflix.',
       ],
     },
     {
@@ -38,7 +38,7 @@ function steps(canAnalyze: boolean) {
         ? ['Jedes Abo mit seinem Preis, zusammengerechnet für Monat und Jahr.']
         : [
             'Jedes Abo mit seinem Preis, zusammengerechnet für Monat und Jahr.',
-            'Abos aus dem Kontoauszug einlesen kommt später.',
+            'Später kannst du Abos auch aus dem Kontoauszug einlesen. Bis dahin trägst du sie selbst ein.',
           ],
     },
     {
@@ -191,11 +191,11 @@ export default function OnboardingScreen() {
               accessibilityRole="button"
               accessibilityLabel="Beispiel ansehen, zeigt eine Liste mit Beispiel-Abos"
             >
-              <Text style={styles.secondText}>Beispiel ansehen</Text>
+              <Text style={styles.secondText}>Erst eine Beispiel-Liste ansehen</Text>
             </TouchableOpacity>
           </>
         )}
-        <Text style={styles.ctaHint}>Ohne Anmeldung.</Text>
+        <Text style={styles.ctaHint}>Ohne Anmeldung. Deine Liste bleibt auf deinem Gerät.</Text>
       </View>
     </View>
   );

@@ -446,22 +446,22 @@ try {
   const onboardingText = await p3.locator('body').innerText();
   check('limit 0: Onboarding verspricht kein automatisches Finden',
     !/findet (sie|deine Abos) automatisch|findet deine Abos/.test(onboardingText)
-    && /kommt später/.test(onboardingText) && !/API Key/.test(onboardingText)
+    && /Später kannst du Abos auch aus dem Kontoauszug einlesen/.test(onboardingText) && !/API Key/.test(onboardingText)
     && !/bald fällig/.test(onboardingText), onboardingText.slice(0, 200));
   check('Onboarding nennt Problem, Lösung und ersten Schritt',
-    /Das Problem/.test(onboardingText) && /Die Lösung/.test(onboardingText) && /So fängst du an/.test(onboardingText));
+    /Das Problem/.test(onboardingText) && /Die Lösung/.test(onboardingText) && /Gleich trägst du dein erstes Abo ein/.test(onboardingText));
   // Aufbau nach Klartext: Name und Nutzen oben, Weiter führt durch, am Ende zwei gleich große Wege
   check('Einführung zeigt Name und Nutzen oben',
     await p3.getByText('Kündigo', { exact: true }).first().isVisible()
     && await p3.getByText('Sieh, was deine Abos kosten.').first().isVisible());
   check('Seite 1 fragt konkret', await p3.getByText('Zahlst du für Abos, die du vergessen hast?').isVisible());
-  check('am Anfang nur Weiter, noch keine Wege', await p3.getByText('Beispiel ansehen').isVisible() === false);
+  check('am Anfang nur Weiter, noch keine Wege', await p3.getByText('Erst eine Beispiel-Liste ansehen').isVisible() === false);
   await p3.getByText('Weiter →').click();
   await p3.getByText('Weiter →').click();
   await p3.getByText('Erstes Abo eintragen →').waitFor({ timeout: 10000 });
   check('letzte Seite zeigt beide Wege',
-    await p3.getByText('Erstes Abo eintragen →').isVisible() && await p3.getByText('Beispiel ansehen').isVisible());
-  await p3.getByText('Beispiel ansehen').first().click();
+    await p3.getByText('Erstes Abo eintragen →').isVisible() && await p3.getByText('Erst eine Beispiel-Liste ansehen').isVisible());
+  await p3.getByText('Erst eine Beispiel-Liste ansehen').click();
   await p3.waitForURL(/\/results/, { timeout: 15000 });
   check('Beispiel aus der Einführung wird gezählt', pings.includes('beispiel_start'), pings);
   await p3.getByText('Jetzt meine Abos eintragen →').waitFor({ timeout: 15000 });
