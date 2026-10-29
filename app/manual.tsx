@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  TextInput, Alert, ActivityIndicator,
+  TextInput, ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors, categories } from '../constants/theme';
@@ -13,7 +13,11 @@ import {
   loadConsent, getConsent, isConsentLoaded, isConsentValid, grantConsent,
 } from '../utils/consent';
 import { ConsentModal } from '../components/ConsentModal';
-import { mergeResults } from '../utils/resultStore';
+import {
+  mergeResults, lastPersistFailed, normalizeName, removeSubscription as removeStored,
+} from '../utils/resultStore';
+import { meldung } from '../utils/meldung';
+import { zaehle } from '../utils/messung';
 
 const FREQUENCIES: { id: Subscription['frequency']; label: string }[] = [
   { id: 'monthly',   label: 'Monatlich' },
@@ -38,8 +42,9 @@ export default function ManualScreen() {
     fetchQuota().then(q => { if (q) setQuota(q); });
   }, []);
 
-  // List of manually added subscriptions
+  // In dieser Sitzung eingetragene Abos; jedes ist beim Hinzufügen schon gespeichert
   const [subs, setSubs] = useState<Subscription[]>([]);
+  const amountRef = useRef<TextInput>(null);
 
   // Form state
   const [name, setName] = useState('');
@@ -63,6 +68,7 @@ export default function ManualScreen() {
     if (!getApiKey() && quotaUnavailable()) {
       const known = POPULAR_SERVICES.find(s => s.name === serviceName);
       if (known) setCategory(known.category);
+      amountRef.current?.focus(); // als Nächstes fehlt nur der Preis
       return;
     }
     const consent = isConsentLoaded() ? getConsent() : await loadConsent();
@@ -104,10 +110,15 @@ export default function ManualScreen() {
     }
   }
 
-  function addSubscription() {
+  /** Speichert sofort, damit "Zurück" nichts verwirft. */
+  async function addSubscription() {
     const parsed = parseFloat(amount.replace(',', '.'));
-    if (!name.trim()) return Alert.alert('Name fehlt', 'Bitte einen Servicenamen eingeben.');
-    if (isNaN(parsed) || parsed <= 0) return Alert.alert('Betrag fehlt', 'Bitte einen gültigen Betrag eingeben.');
+    // meldung statt Alert.alert: Alert ist im Browser stumm
+    if (!name.trim()) return meldung('Name fehlt', 'Bitte einen Servicenamen eingeben.');
+    if (isNaN(parsed) || parsed <= 0) {
+      amountRef.current?.focus();
+      return meldung('Betrag fehlt', 'Bitte trag den Preis ein, zum Beispiel 13,99.');
+    }
 
     const today = new Date();
     const next = nextChargeAfter(today, frequency);
@@ -122,7 +133,15 @@ export default function ManualScreen() {
       nextCharge: next.toISOString().slice(0, 10),
     };
 
-    setSubs(prev => [sub, ...prev]);
+    const stored = await mergeResults([sub]);
+    if (lastPersistFailed()) {
+      return meldung('Nicht gespeichert', 'Das Abo konnte auf diesem Gerät nicht gespeichert werden. Bitte versuch es noch einmal.');
+    }
+    zaehle('abo_gespeichert');
+    // Gleicher Dienst mit gleichem Betrag wird zusammengeführt und behält seine ID
+    const saved = stored.find(s =>
+      normalizeName(s.name) === normalizeName(sub.name) && s.amount.toFixed(2) === sub.amount.toFixed(2)) ?? sub;
+    setSubs(prev => [saved, ...prev.filter(s => s.id !== saved.id)]);
     // Reset form
     setName('');
     setAmount('');
@@ -130,15 +149,13 @@ export default function ManualScreen() {
     setCategory('streaming');
   }
 
-  function removeSubscription(id: string) {
+  async function removeSubscription(id: string) {
+    await removeStored(id);
     setSubs(prev => prev.filter(s => s.id !== id));
   }
 
-  async function goToResults() {
-    if (subs.length === 0) {
-      return Alert.alert('Keine Abos', 'Füge zuerst mindestens ein Abo hinzu.');
-    }
-    await mergeResults(subs);
+  function goToResults() {
+    if (subs.length === 0) return meldung('Keine Abos', 'Füge zuerst mindestens ein Abo hinzu.');
     router.push('/results');
   }
 
@@ -255,6 +272,7 @@ export default function ManualScreen() {
         <Text style={styles.fieldLabel}>Betrag (€)</Text>
         <TextInput
           style={styles.input}
+          ref={amountRef}
           placeholder="z.B. 13,99"
           placeholderTextColor={colors.textTertiary}
           keyboardType="decimal-pad"
@@ -358,9 +376,9 @@ export default function ManualScreen() {
             onPress={goToResults}
             activeOpacity={0.85}
             accessibilityRole="button"
-            accessibilityLabel="Analyse anzeigen"
+            accessibilityLabel="Fertig, zur Übersicht"
           >
-            <Text style={styles.resultsBtnText}>Analyse anzeigen →</Text>
+            <Text style={styles.resultsBtnText}>Fertig, zur Übersicht →</Text>
           </TouchableOpacity>
         </>
       )}

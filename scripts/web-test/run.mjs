@@ -385,6 +385,39 @@ try {
     await p2.getByLabel('Preis automatisch mit KI ergänzen').count() === 0);
   check('limit 0: keine KI-Versprechen beim manuellen Eintragen',
     await p2.getByText(/KI ergänzt|KI ✨/).count() === 0);
+
+  // Eintragen: sichtbare Meldungen, Cursor ins Betragsfeld, sofort gespeichert, Zurück verliert nichts
+  const dialogs = [];
+  p2.on('dialog', d => { dialogs.push(d.message()); d.accept(); });
+  const eigene = () => p2.evaluate(() => JSON.parse(localStorage.getItem('kuendigo_subs_v1') ?? '[]')
+    .filter(s => !s.demo).map(s => `${s.name}|${s.amount}|${s.frequency}`));
+  await p2.getByText('Netflix', { exact: true }).first().click();
+  check('Dienst antippen springt ins Betragsfeld',
+    await p2.evaluate(() => document.activeElement?.getAttribute('placeholder')) === 'z.B. 13,99');
+  await p2.getByText('+ Abo hinzufügen').click();
+  await p2.waitForTimeout(300);
+  check('fehlender Preis meldet sich sichtbar', dialogs.some(m => /Betrag fehlt/.test(m)), dialogs);
+  check('ohne Preis wird nichts gespeichert', (await eigene()).length === 0, await eigene());
+  await p2.getByPlaceholder('z.B. 13,99').fill('13,99');
+  await p2.getByText('+ Abo hinzufügen').click();
+  await p2.getByText('Meine Abos (1)').waitFor({ timeout: 10000 });
+  check('Abo ist sofort gespeichert, noch vor "Fertig"', (await eigene()).includes('Netflix|13.99|monthly'), await eigene());
+  check('gespeichertes Abo wird gezählt', pings.includes('abo_gespeichert'), pings);
+  check('zweiter Knopf heißt "Fertig, zur Übersicht"',
+    await p2.getByText('Fertig, zur Übersicht →').count() > 0 && await p2.getByText(/Analyse anzeigen/).count() === 0);
+  // Entfernen in der Liste entfernt auch aus dem Speicher
+  await p2.getByPlaceholder('z.B. Netflix, Spotify…').fill('Spotify');
+  await p2.getByPlaceholder('z.B. 13,99').fill('9,99');
+  await p2.getByText('+ Abo hinzufügen').click();
+  await p2.getByText('Meine Abos (2)').waitFor({ timeout: 10000 });
+  await p2.getByLabel('Spotify entfernen').click();
+  await p2.getByText('Meine Abos (1)').waitFor({ timeout: 10000 });
+  check('Entfernen löscht auch aus dem Speicher', !(await eigene()).some(s => s.startsWith('Spotify')), await eigene());
+  await p2.getByText('← Zurück').click();
+  await open2('/manual');
+  await p2.getByText(/Betrag/).first().waitFor({ timeout: 15000 });
+  check('nach "Zurück" ist das Abo noch da', (await eigene()).includes('Netflix|13.99|monthly'), await eigene());
+  await p2.evaluate(() => localStorage.removeItem('kuendigo_subs_v1'));
   await open2('/');
   await p2.getByText('Abos eintragen →').waitFor({ timeout: 30000 });
   check('limit 0: Startscreen verspricht nichts gratis', await p2.getByText(/gratis/i).count() === 0);
@@ -524,6 +557,8 @@ try {
   await p4.getByText('Alle Abos').waitFor({ timeout: 30000 });
   check('Altdaten werden angezeigt',
     await p4.getByText('Altabo Netflix').count() > 0 && await p4.getByText('Altabo Adobe').count() > 0);
+  check('keine erfundene Sparzahl auf der Ergebnisseite',
+    await p4.getByText(/Sparerpotenzial|Im Schnitt nutzen/).count() === 0);
   check('Rechte-Kasten neutral, ohne Paragrafen',
     await p4.getByText('ℹ️ Kündigungsfrist prüfen').count() > 0
     && await p4.getByText(/KSchG|BGB/).count() === 0);

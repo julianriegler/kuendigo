@@ -947,19 +947,6 @@ export default function ResultsScreen() {
           />
         ))}
 
-        {/* Savings tip */}
-        <View style={styles.tipBox}>
-          <Text style={styles.tipTitle}>💡 Sparerpotenzial</Text>
-          <Text style={styles.tipText}>
-            Im Schnitt nutzen Nutzer {Math.round(subscriptions.length * 0.3)} ihrer Abos kaum.
-            Das wären{' '}
-            <Text style={{ color: colors.accent, fontWeight: '700' }}>
-              {formatEur(totalMonthly * 0.3)}/Monat
-            </Text>
-            {' '}die du sparen könntest — tippe auf „Kündigen" für die Anleitung.
-          </Text>
-        </View>
-
         {/* Legal note */}
         <View style={styles.legalBox}>
           <Text style={styles.legalTitle}>ℹ️ Kündigungsfrist prüfen</Text>
@@ -1404,13 +1391,6 @@ const styles = StyleSheet.create({
   },
   loadingText: { fontSize: 14, color: colors.textSecondary },
 
-  tipBox: {
-    backgroundColor: `${colors.accent}10`, borderRadius: 14, padding: 18,
-    marginTop: 8, marginBottom: 12,
-    borderWidth: 1, borderColor: `${colors.accent}25`,
-  },
-  tipTitle: { fontSize: 15, fontWeight: '700', color: colors.textPrimary, marginBottom: 8 },
-  tipText: { fontSize: 14, color: colors.textSecondary, lineHeight: 22 },
 
   legalBox: {
     backgroundColor: colors.surface, borderRadius: 14, padding: 16,
