@@ -121,7 +121,7 @@ export default function OnboardingScreen() {
             <Text style={styles.brandTagline}>Sieh, was deine Abos kosten.</Text>
           </View>
         </View>
-        {!last && (
+        {last ? <View style={styles.skipBtn} /> : (
           <TouchableOpacity
             onPress={ueberspringen}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -249,9 +249,9 @@ const styles = StyleSheet.create({
   ctaText: { fontSize: 17, fontWeight: '700', color: colors.bg, letterSpacing: 0.2 },
   secondButton: {
     borderRadius: 14, borderWidth: 1.5, borderColor: colors.accent,
-    paddingVertical: 17, paddingHorizontal: 40,
+    paddingVertical: 17, paddingHorizontal: 16,
     width: '100%', minHeight: 44, alignItems: 'center', marginTop: 12,
   },
-  secondText: { fontSize: 17, fontWeight: '700', color: colors.accent, letterSpacing: 0.2 },
+  secondText: { fontSize: 17, fontWeight: '700', color: colors.accent, letterSpacing: 0.2, textAlign: 'center' },
   ctaHint: { fontSize: 12, color: colors.textTertiary, marginTop: 12 },
 });
